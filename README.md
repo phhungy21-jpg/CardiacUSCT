@@ -11,8 +11,15 @@ a clinical claim. See protocol Section 0 for exact scope.
 
 ## Status
 
+All 8 protocol phases complete. Draft writeup at [`WRITEUP.md`](WRITEUP.md).
+
 See [`LOG.md`](LOG.md) for phase checklist and run history. See
 [`MANIFEST.md`](MANIFEST.md) for what's currently on disk (data, code, results).
+See [`LIMITATIONS.md`](LIMITATIONS.md) for known scope gaps pre-written for
+the eventual paper's limitations section (registration quality vs.
+tissue-echo physics — kept separate since they're different kinds of gap).
+See [`FIGURES.md`](FIGURES.md) for the planned writeup figures and what's
+already generated.
 
 ## Setup
 

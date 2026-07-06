@@ -1,0 +1,35 @@
+======================================================================
+HEADLINE: no cross-cohort degradation in endpoint error.
+======================================================================
+ACDC (in-distribution, n=150): endpoint error 0.849mm [95% CI 0.814, 0.887]
+M&Ms (held-out, n=342):        endpoint error 0.717mm [95% CI 0.704, 0.731]
+Gap (M&Ms - ACDC): -0.133mm, bootstrap 95% CI [-0.172, -0.095]
+  -> This CI is entirely negative (excludes zero) -- the gap is unlikely to be sampling
+     noise alone. Read this as 'no cross-cohort degradation, robustly' -- NOT as 'proven
+     genuine improvement': the ground-truth-quality confound below (M&Ms's own weaker
+     registration) is a plausible full/partial alternative explanation that isn't ruled out.
+Effect size (Cohen's d, M&Ms vs ACDC): -0.819
+
+ACDC Dice: 0.664 [95% CI 0.647, 0.680]
+M&Ms Dice: 0.589 [95% CI 0.578, 0.599]
+Gap (M&Ms - ACDC) Dice: -0.075, bootstrap 95% CI [-0.095, -0.055]
+  -> Dice DOES show a modest drop in the expected direction (unlike endpoint error) — the two metrics disagree on direction, which is itself worth reporting rather than picking whichever looks better.
+Effect size (Cohen's d, M&Ms vs ACDC): -0.740
+
+======================================================================
+NAMED CONFOUND (not ruled out): M&Ms's own registration-derived ground truth is
+lower quality than ACDC's (Demons mean Dice 0.641 vs 0.752, see LOG.md run 2026-07-07-02).
+A smoother/less-detailed target field is plausibly easier for a smooth CNN to match
+closely, independent of true motion-recovery generalization. This confound has NOT been
+ruled out and is the most likely explanation for the negative endpoint-error gap above.
+======================================================================
+
+=== Vendor breakdown (clean result — within-M&Ms comparison, not confounded by the
+    ACDC-vs-M&Ms ground-truth-quality issue above) ===
+  Vendor A: n=95, endpoint error 0.720mm [95% CI 0.696, 0.746]
+  Vendor B: n=125, endpoint error 0.736mm [95% CI 0.713, 0.765]
+  Vendor C: n=72, endpoint error 0.707mm [95% CI 0.686, 0.727]
+  Vendor D: n=50, endpoint error 0.674mm [95% CI 0.653, 0.696]
+  Range across vendors: 0.674 - 0.736mm (spread of 0.062mm) -- vendors cluster tightly, no single vendor is an outlier.
+
+No single p-value is headlined here, per protocol 7.2 (fragile/misleading at this N).
