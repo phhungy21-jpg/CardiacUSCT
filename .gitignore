@@ -3,6 +3,7 @@ data/
 *.nii
 *.nii.gz
 *.dcm
+jwave_test/results/phase4_pilot_dataset/
 
 # Python
 __pycache__/
