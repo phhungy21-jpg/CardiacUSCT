@@ -266,3 +266,19 @@
 - Gate passed? Y, with the data-access caveat above stated rather than hidden.
 - Next action: this is a draft (v0.1) — ready for the user's own review/editing pass before any arXiv posting, per protocol 8.2's "post only when the work is actually sound."
 
+### Run 2026-07-07-06 — preprint figures + results tables
+- Phase: 8.2 (assemble)
+- Generated all 7 figures planned in `FIGURES.md` (pipeline schematic, Dice-vs-surface-distance scatter [already existed], registration quality vs. contraction magnitude [r=-0.777], best/median/worst warp panel, clinical-units error translation [cites ASE 2015 chamber quantification guideline], cross-cohort result bars, vendor breakdown, quality-weight histogram) — all programmatic (`src/fig_*.py`), no manual drawing required. Also wrote `RESULTS_TABLES.md` (6 tables: cohort summary, Phase 5 CV, Phase 6/7 cross-cohort, vendor breakdown, registration quality by pathology group, M&Ms data-quality fixes) and cross-referenced figures/tables into `WRITEUP.md` at the relevant paragraphs.
+- Next action: user's editing pass on `WRITEUP.md`; commit/push once user confirms.
+
+### Run 2026-07-07-07 — preprint package assembled (manuscript.docx, tables, figures)
+- Phase: 8.2 (assemble, packaging for shipping)
+- Fixed a real inaccuracy caught during this pass: `WRITEUP.md` had speculatively guessed M&Ms vendor-letter-to-scanner-name mapping ("A: Siemens/Canon-class"); verified the actual mapping against the dataset's own metadata CSV (A=Siemens, B=Philips, C=GE, D=Canon) and corrected the text.
+- Added a References section (9 entries: ACDC/M&Ms dataset papers, 5 tissue-Doppler reproducibility/accuracy studies, ASE chamber-quantification guideline) using the source titles/PMIDs actually gathered during this project's earlier research (run -13's WebSearch results) — explicitly flagged that full bibliographic details (exact author lists, volume/pages) were not independently re-verified beyond the source identifier, rather than presenting fabricated-looking complete citations.
+- Added Author/Affiliation placeholder fields (no info available to fill in — not invented).
+- Built a pandoc reference-doc template with Normal/Body Text/headings set to Times New Roman (11pt body, proportionally scaled headings), verified by reopening the output docx and checking each style's actual font/size. Converted `WRITEUP.md` -> `preprint_package/manuscript.docx` and `RESULTS_TABLES.md` -> `preprint_package/results_tables.docx`.
+- Assembled `preprint_package/`: `manuscript.docx`, `results_tables.docx`, `figures/` (9 standalone PNGs), 3 source CSVs, and a package `README.md` documenting regeneration steps and the pre-submission checklist.
+- Gate 8 re-checked on final content: "solved" appears once, inside an accurately-quoted citation title (Bernard et al.'s actual paper title, about MRI segmentation) — not near "USCT" (which appears once, in Section 1, unrelated location). Word count ~2,400 (reasonable for a STACOM-style extended abstract).
+- **Readiness assessment: NOT fully submission-ready.** Ready: all figures/tables/manuscript content, Gate 8 content checks. Not ready: (1) author/affiliation info, (2) bibliographic verification of references, (3) venue-specific (LNCS) formatting/page-limit compliance — content is complete but not laid out to any specific venue's template.
+- Next action: user fills in author info and verifies references before actual submission; venue formatting pass if targeting a specific LNCS-format venue.
+

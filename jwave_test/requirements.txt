@@ -1,0 +1,15 @@
+# Requires python>=3.10
+# Toolkit decision (protocol Phase 1.1): jWave, chosen for JAX
+# differentiability (future physics-consistency losses / end-to-end learned
+# reconstruction). Versions pinned below per Gate 1's GPU-timed reference
+# reproduction (Colab, Tesla T4) — see LOG.md run 2026-07-07-10.
+numpy==1.24.3
+scipy==1.11.1
+matplotlib==3.7.2
+jwave==0.2.1
+jax==0.4.38
+jaxlib==0.4.38
+# GPU environments (e.g. Colab): also install the matching CUDA plugin
+# explicitly, or a jax/CUDA-plugin version-skew error occurs (see LOG.md
+# run 2026-07-07-10 for the exact AttributeError and fix):
+#   pip install -U "jax[cuda12]==0.4.38"

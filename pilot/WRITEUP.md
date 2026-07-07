@@ -2,6 +2,9 @@
 
 *Draft v0.1 — target venue: STACOM (MICCAI workshop) or similar cardiac-motion/computational-modeling workshop. Not yet submitted anywhere.*
 
+**Authors:** [TBD — fill in before submission]
+**Affiliations:** [TBD — fill in before submission]
+
 ## Abstract
 
 We test the feasibility of a specific idea: that a small model trained to recover
@@ -47,14 +50,16 @@ result obtained is closest to "encouraging," reported with the caveats below.
 - **ACDC**: 150 patients (100 training + 50 testing splits, both with ED/ES
   ground-truth masks — this local release includes GT for the "testing" split,
   unlike the original challenge). Single center.
-- **M&Ms**: 345 patients, 4 vendors (A: Siemens/Canon-class, B, C, D — see M&Ms
-  documentation for exact mapping), 342 usable after data-quality fixes (below).
+- **M&Ms**: 345 patients, 4 vendors (A: Siemens, B: Philips, C: GE, D: Canon —
+  confirmed against the dataset's own metadata CSV), 342 usable after data-quality fixes (below).
   Held out entirely from training; touched exactly once, in the final evaluation.
 
 Both datasets provide cine short-axis MRI with expert segmentation masks at
 end-diastole (ED) and end-systole (ES) only — not every cardiac phase.
 
 ## 3. Methods
+
+[Figure 1: pipeline overview — `results/figures/pipeline_schematic.png`]
 
 ### 3.1 Scope decision: ED→ES only
 
@@ -106,13 +111,20 @@ transparently), and each patient carries a continuous quality weight
 pass/fail filter — all 150 ACDC patients are retained, weighted by registration
 quality (mean weight 0.599±0.134; range [0.32, 0.90]; only 2 patients >2 voxels,
 both from the hardest-to-register pathology group, kept and down-weighted, not
-excluded).
+excluded). [Figure 2: Dice-vs-surface-distance, all 3 labels —
+`results/gate3_diagnostic/dice_vs_surfdist_scatter.png`] [Figure 4: qualitative
+best/median/worst registration — `results/figures/warp_panel_best_median_worst.png`]
+[Figure 5: boundary error vs. real cardiac wall dimensions —
+`results/figures/clinical_units_error.png`] [Figure 7: quality-weight
+distribution — `results/figures/quality_weight_distribution.png`]
 
 Registration quality correlates with contraction magnitude, not disease
 severity per se: patients with weak/reduced contraction (dilated cardiomyopathy)
 register best (mean Dice 0.847); patients with vigorous or complex contraction
 (healthy, hypertrophic cardiomyopathy) register worst (0.705, 0.667) — large
-deformation, not pathology, is what defeats the registration.
+deformation, not pathology, is what defeats the registration (r = -0.777
+between contraction magnitude and Dice). [Figure 3:
+`results/figures/quality_vs_contraction.png`] [Table 5: `RESULTS_TABLES.md`]
 
 ### 3.4 Synthetic Doppler projection
 
@@ -147,13 +159,15 @@ baseline on **100% of 150 patients**: endpoint error 0.849±0.227mm vs. 3.773±1
 (zero-motion) and 3.151±0.908mm (mean-motion). Train/validation loss curves track
 closely across all 5 folds with no divergence — no overfitting signature, expected
 given the model's small size relative to ~1,200+ training slices per fold.
+[Table 2: `RESULTS_TABLES.md`; curves: `results/phase5_train_val_curves.png`]
 
 ### 4.2 Cross-cohort evaluation (M&Ms, one clean pass)
 
 **No cross-cohort degradation in endpoint error.** ACDC (in-distribution) 0.849mm
 [95% CI 0.814, 0.887]; M&Ms (held-out) 0.717mm [95% CI 0.704, 0.731]. The gap
 (-0.133mm) has a bootstrap 95% CI of [-0.172, -0.095] — entirely negative, unlikely
-to be sampling noise.
+to be sampling noise. [Figure 6: `results/figures/cross_cohort_result.png`;
+Table 3: `RESULTS_TABLES.md`]
 
 **This is not presented as proof of superior generalization.** M&Ms's own
 registration-derived ground truth is of measurably lower quality than ACDC's
@@ -178,7 +192,8 @@ endpoint-error result.
 cohort (not subject to the ACDC-vs-M&Ms ground-truth-quality confound, since it's
 an entirely within-M&Ms comparison), endpoint error is tightly clustered across
 all 4 vendors: 0.720, 0.736, 0.707, 0.674mm (range 0.062mm), with no outlier
-vendor.
+vendor. [Figure 6b: `results/figures/vendor_breakdown.png`; Table 4:
+`RESULTS_TABLES.md`]
 
 No single p-value is headlined anywhere in this study (fragile/misleading at this
 N); bootstrap confidence intervals and Cohen's d effect sizes are reported instead.
@@ -222,3 +237,41 @@ with every config/result/decision in `LOG.md`; a checksummed freeze manifest of
 all Phase 1-4 outputs before Phase 5 began (`results/phase4_freeze_manifest.csv`).
 `data/` is gitignored (never committed) — a reader would need their own ACDC/M&Ms
 access to reproduce end-to-end, but every processing step is scripted in `src/`.
+
+## References
+
+*Dataset and guideline citations below are given with source identifiers
+(PMID/URL) gathered during this project's research. Author lists, exact
+journal/volume/page details, and formatting should be verified against the
+original records before final submission — they are not fabricated, but full
+bibliographic details were not independently re-verified beyond the source
+title/identifier.*
+
+1. Bernard O, et al. "Deep Learning Techniques for Automatic MRI Cardiac
+   Multi-Structures Segmentation and Diagnosis: Is the Problem Solved?" IEEE
+   Transactions on Medical Imaging, 2018. (ACDC dataset.) *[Verify exact
+   citation before submission.]*
+2. Campello VM, et al. "Multi-Centre, Multi-Vendor and Multi-Disease Cardiac
+   Segmentation: The M&Ms Challenge." IEEE Transactions on Medical Imaging,
+   2021. (M&Ms dataset.) *[Verify exact citation before submission.]*
+3. "Guidance for accurate and consistent tissue Doppler velocity measurement:
+   comparison of echocardiographic methods using a simple vendor-independent
+   method for local validation." PMID: 24699322.
+4. "Reproducibility of pulsed wave tissue Doppler echocardiography." PMID:
+   10359921.
+5. "Pulsed-wave tissue Doppler and color tissue Doppler echocardiography:
+   calibration with M-mode, agreement, and reproducibility in a clinical
+   setting." PMID: 19594813.
+6. "Accuracy of spectral Doppler flow and tissue velocity measurements in
+   ultrasound systems." PMID: 14962617.
+7. "Grading of myocardial dysfunction by tissue Doppler echocardiography: a
+   comparison between velocity, displacement, and strain imaging in acute
+   ischemia." PMID: 16631008.
+8. "Measurements of left ventricular myocardial longitudinal systolic
+   displacement using spectral and colour tissue Doppler: time for a
+   reassessment?" PMC2661320.
+9. American Society of Echocardiography. Recommendations for chamber
+   quantification / right ventricular size and function (ASE 2015 guideline
+   family) — normal wall thickness ranges cited in Figure 5. *[Verify exact
+   citation: "Recommendations for Cardiac Chamber Quantification by
+   Echocardiography in Adults," J Am Soc Echocardiogr, 2015.]*
