@@ -61,7 +61,8 @@ from phase3_mri_irregular_ring_reconstruction import _polar_resample, r_at_theta
 from matplotlib import pyplot as plt
 import os
 
-PATIENT_ID = "patient023"
+import sys
+PATIENT_ID = sys.argv[1] if len(sys.argv) > 1 else "patient023"
 
 c_ref = cfg.CHEST_WALL_PROXY.sound_speed
 dx = (cfg.DX_M, cfg.DX_M)
@@ -187,10 +188,24 @@ def capture_all_pairs(medium):
     return pairs
 
 
-# --- Generalized curvature-weight model (baseline-angle interpolation) ---
+# --- Curvature-weight model, FULLY SELF-CONSISTENT measurement (run
+# -60, `phase3_8probe_calibration_45_135.py`) -- replaces the earlier
+# interpolation-assumption version after discovering the old 4-probe-
+# derived 90/180-degree values do NOT match this geometry's own
+# measurement of the same nominal categories (e.g. 90deg at R=41:
+# 0.136 old vs 0.238 measured here) -- mixing calibration values
+# measured under different simulation setups is not valid, so ALL
+# baseline categories are now measured within this SAME 8-probe
+# geometry. With exactly 8 probes at 45-degree spacing, every ordered
+# pair's separation is EXACTLY one of {0, 45, 90, 135, 180} degrees --
+# no baseline-angle interpolation is needed at all, only per-category
+# radius interpolation (same 3 radii as before: 41, 71, 88 cells).
 _CAL_R = np.array([41.0, 71.0, 88.0])
-_CAL_CROSS = np.array([0.136, 0.000, 0.0001])       # measured at baseline=90deg (run -44/-53)
-_CAL_ANTIPODAL = np.array([0.045, 0.000, 0.0003])   # measured at baseline=180deg (run -44/-53)
+_CAL_45 = np.array([0.5872, 0.3362, 0.0126])
+_CAL_90 = np.array([0.2380, 0.0002, 0.0001])
+_CAL_135 = np.array([0.0001, 0.0018, 0.0086])
+_CAL_180 = np.array([0.0075, 0.0005, 0.0002])
+_CAL_BY_SEP = {45: _CAL_45, 90: _CAL_90, 135: _CAL_135, 180: _CAL_180}
 
 
 def _linear_weight(R, cal_r, cal_w):
@@ -206,13 +221,7 @@ def pair_weight_at_R(tx_name, rx_name, R):
     sep = angular_separation(_ANGLE_OF[tx_name], _ANGLE_OF[rx_name])
     if sep < 1e-6:
         return 1.0  # monostatic, always trusted (per run -44 onward)
-    cross_w = _linear_weight(R, _CAL_R, _CAL_CROSS)        # anchor at sep=90
-    antipodal_w = _linear_weight(R, _CAL_R, _CAL_ANTIPODAL)  # anchor at sep=180
-    if sep <= 90:
-        frac = sep / 90.0
-        return 1.0 + frac * (cross_w - 1.0)
-    frac = (sep - 90.0) / 90.0
-    return cross_w + frac * (antipodal_w - cross_w)
+    return _linear_weight(R, _CAL_R, _CAL_BY_SEP[sep])
 
 
 N_ANGLES = 144

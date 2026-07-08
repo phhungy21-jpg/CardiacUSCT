@@ -4161,3 +4161,181 @@ forward are `jwave_test/`-specific (Phase 2 work).
   measurement (run -56's flagged gap) before being considered for
   official adoption.
 
+### Run 2026-07-08-60 — Real 45/135-degree calibration measured: discovered the old 4-probe-derived 90/180 values do NOT transfer to the 8-probe geometry (mixing them was invalid)
+- Phase: 3 (closing run -56/-58/-59's flagged gap). Per user: "so do
+  both then, 8 probe on a selector?" — combining 8 probes with local-
+  max selection (run -57's 0.04mm result) relied on an INTERPOLATED,
+  never-measured 45/135-degree weight. `src/phase3_8probe_calibration_45_135.py`
+  (isolated, self-contained) measures it directly: same isolated
+  single-boundary myocardium-disk method as run -44/-53, generalized
+  to the 8-probe layout (which has actual 45/135-degree-separated pairs
+  a 4-probe layout structurally cannot have) and to a `predicted_time`
+  search that uses this module's own center instead of a hardcoded one.
+- **Finding, not assumed**: before trusting the new 45/135 numbers,
+  compared this same 8-probe geometry's OWN measured 90/180-degree
+  ratios against the original 4-probe calibration (run -44/-53) as an
+  internal-consistency check. **They do NOT match**: at R=41, 90-degree
+  ratio is 0.238 (8-probe geometry) vs 0.136 (4-probe geometry) — a
+  real, substantial discrepancy for the nominally same physical
+  category. **Conclusion: calibration values measured under one
+  simulation setup cannot be safely mixed with another, even for a
+  "same" baseline-angle category** — the interpolation model used in
+  runs -56/-57/-59 (which reused the OLD 4-probe 90/180 values as
+  anchors) was built on an invalid cross-geometry assumption.
+  (Root cause not further investigated — plausibly a small setup
+  difference, e.g. `SEARCH_RADIUS_CELLS`/time_axis duration, between
+  the 4-probe and 8-probe scripts; not resolved here, just detected and
+  avoided by re-measuring everything self-consistently.)
+- **Fix**: measured ALL FOUR non-monostatic baseline categories (45,
+  90, 135, 180 degrees) directly within the 8-probe geometry, at the
+  same 3 radii (41, 71, 88 cells):
+  | R | 45deg | 90deg | 135deg | 180deg |
+  |---|---|---|---|---|
+  | 41 | 0.5872 | 0.2380 | 0.0001 | 0.0075 |
+  | 71 | 0.3362 | 0.0002 | 0.0018 | 0.0005 |
+  | 88 | 0.0126 | 0.0001 | 0.0086 | 0.0002 |
+  With exactly 8 probes at 45-degree spacing, every ordered pair's
+  separation is EXACTLY one of these 5 values (0/45/90/135/180) — no
+  baseline-ANGLE interpolation is needed at all anymore, only
+  per-category RADIUS interpolation (same mechanism as before, now with
+  4 real anchor categories instead of 2 measured + 2 interpolated).
+  `phase3_mri_8probe_test.py`'s weight model updated accordingly
+  (`_CAL_45/_CAL_90/_CAL_135/_CAL_180`, `pair_weight_at_R` simplified
+  to an exact category lookup).
+- Physical sanity checked? by whom?: Claude — the cross-geometry
+  consistency check itself (comparing 8-probe's own 90/180 measurement
+  against the established 4-probe value) is the sanity check that
+  caught this, performed BEFORE trusting the new numbers, per this
+  project's standing discipline.
+- Gate passed? (Y/N): N/A — calibration measurement.
+- Next action: re-run patient023 with the fully self-consistent
+  calibration to get the real (not assumption-inflated) 8-probe result
+  — see run -61.
+
+### Run 2026-07-08-61 — Patient023 re-verified with fully self-consistent 8-probe calibration: outer error 2.43mm -> 0.62mm (real, substantial, not as dramatic as the assumption-based 0.04mm)
+- Phase: 3 (final validation of the 8-probe + local-max combination).
+  Reran `phase3_mri_8probe_test.py` (patient023, 8 probes, local-max-
+  only selection) with run -60's fully-measured calibration replacing
+  the earlier interpolation assumption.
+- Result: **outer fitted scale=0.930 (true=1.000), error=0.62mm**
+  (down from the 4-probe baseline's 2.43mm and run -56's naive-8-probe-
+  argmax 2.16mm; NOT as low as run -57's 0.04mm, which relied on the
+  now-invalidated interpolation assumption). Inner: scale=0.955,
+  err=0.27mm. The outer score curve
+  (`results/figures/phase3_mri_8probe_localmax_test_patient023.png`)
+  is now qualitatively different and cleaner than every previous
+  version: NO monotonic tail-artifact at all (smooth decline from
+  scale=0.7), with two near-tied genuine local peaks around
+  scale=0.93-1.0 (confidence=1.00, honestly reported as a close call,
+  not a confident detection) — the fit lands on the first (slightly
+  earlier) of the two, 0.07 scale units short of the true value.
+  **Honest characterization: this is a real, substantial improvement
+  (~75% error reduction vs the 4-probe baseline) from genuinely more
+  probe redundancy plus a principled selection rule — not the
+  near-perfect 0.04mm figure previously reported, which is now
+  understood to have been partly an artifact of an unvalidated
+  assumption.**
+- **Caveat carried forward, not resolved**: the homogeneous-medium
+  control's OUTER fit now shows confidence=inf (previously it was the
+  INNER control that showed this, run -57) — the same known limitation
+  (a genuine local max can occur in pure noise by chance) still applies,
+  just manifesting on a different channel with the updated calibration.
+  Confirms this is a structural property of the local-max+confidence
+  approach itself, not something a better calibration measurement can
+  fix on its own.
+- Physical sanity checked? by whom?: Claude — direct comparison against
+  run -56/-57's prior (now-superseded) numbers, and re-confirmed the
+  homogeneous-control caveat still applies under the new calibration
+  rather than assuming it was calibration-specific.
+- Gate passed? (Y/N): N/A — validation/characterization run.
+- Next action: the 8-probe geometry + local-max selection, now on a
+  fully self-consistent (measured, not assumed) calibration, gives a
+  real ~75% error reduction for patient023's outer boundary. Before
+  considering 8 probes as the new OFFICIAL default geometry (replacing
+  4 probes everywhere), it would need the same breadth of validation
+  the 4-probe geometry already has (patient001, synthetic ring ED/ES
+  frames, eccentric off-center cycle) — NOT yet done, a materially
+  larger undertaking than the local-max-selector patch (run -59) since
+  it changes the simulation setup itself (more transmits per frame,
+  longer runtime), not just the readout rule. Recommended before any
+  official-pipeline default change; not assumed complete by this run.
+
+### Run 2026-07-08-62 — 8-probe model applied to patient001 (static): confirms it "still stands" — clean, sharp, single-dominant-peak result, matching/slightly better than the official 4-probe pipeline
+- Phase: 3 (breadth-of-validation, per user: "apply the same model on
+  id01 so see if he still stands"). Parameterized
+  `phase3_mri_8probe_test.py` with a `PATIENT_ID` CLI arg (was
+  hardcoded to patient023) and ran it on patient001's static real
+  shape, using the fully self-consistent calibration from run -60.
+- Result: **inner scale=0.995 (err=0.03mm, conf=1.33), outer
+  scale=0.975 (err=0.18mm, conf=1.00)** — matches or slightly betters
+  the official patched 4-probe pipeline's patient001 result (run -59:
+  0.03mm/0.26mm). Score curves
+  (`results/figures/phase3_mri_8probe_localmax_test_patient001.png`)
+  show ONE clean, sharp, dominant peak for each boundary, right at the
+  true value — no ambiguity, no competing peaks. Homogeneous-medium
+  control now shows LOW confidence on BOTH channels (0.00/0.00) — no
+  false-positive concern here (contrast with run -61's patient023
+  result, where the control's outer channel showed confidence=inf;
+  this appears to be patient/frame-dependent, not a fixed property of
+  the method).
+- Physical sanity checked? by whom?: Claude — direct comparison against
+  the already-validated official-pipeline patient001 numbers (run -59).
+- Gate passed? (Y/N): N/A — breadth-of-validation check.
+- Next action: per user, "if all works out, generate the 8 frames for
+  id23" — proceed to the full real motion cycle for patient023 using
+  the 8-probe model. See run -63.
+
+### Run 2026-07-08-63 — 8-probe model across patient023's full real motion cycle: MIXED result, including one confidently-wrong frame — does NOT uniformly outperform the 4-probe pipeline
+- Phase: 3 (full-cycle validation). `src/phase3_mri_8probe_motion_cycle_test.py`
+  (new isolated script, mirrors `phase3_mri_motion_cycle_reconstruction.py`'s
+  design — fixed ED template, per-frame own centroid, frozen-scene
+  medium rebuild per phase — but built on the 8-probe geometry/capture/
+  weight model via import from `phase3_mri_8probe_test.py`, no existing
+  file modified). Applied to patient023's real 8-phase registration-
+  derived motion cycle (same data as runs -49/-54/-59).
+- Result: **inner RMSE=0.9978mm, outer RMSE=1.7482mm** across the 8
+  phases. Compare: 4-probe patched pipeline (run -59) inner=0.8354mm,
+  outer=1.9053mm; naive 4-probe baseline (run -54) inner=0.8014mm,
+  outer=2.2940mm. **Outer improved (~8% better than the patched 4-probe
+  pipeline, ~24% better than naive), but INNER GOT WORSE overall**
+  (0.80-0.84mm -> 1.00mm) — NOT a uniform win.
+  - Per-phase breakdown is highly uneven: phases 1/8 and 4/5 are
+    excellent (outer err 0.34-0.66mm), phases 2/7 are moderate (outer
+    err 2.34mm), and **phases 3/6 are a real failure**: inner
+    err=1.70mm with **confidence=inf** (fitted_r=7.10mm, LARGER than
+    the true 5.40mm — a confidently-wrong overshoot, not a low-
+    confidence near-miss) and outer err=2.49mm, the worst of the whole
+    cycle. Visually confirmed in
+    `results/figures/phase3_mri_8probe_motion_cycle_test_patient023.png`:
+    phases 3/6's fitted contours clearly overshoot the true boundary,
+    unlike any other frame.
+  - **This is a genuinely new failure mode, not seen in the static
+    test or in patient001** — the confidence metric reporting `inf`
+    (meaning only one genuine local max exists) at a frame where the
+    answer is nonetheless wrong is exactly the false-confidence risk
+    flagged as an open caveat since run -57 (homogeneous-control
+    check), now observed on REAL data, not just a synthetic control.
+- **Honest conclusion (not spun as a win)**: the 8-probe model does
+  NOT uniformly "still stand" across the full motion cycle. It has
+  real strengths (dramatically better at some phases) and a real new
+  weakness (confidently wrong at others) that the static single-frame
+  tests (patient001, patient023 ED-only) did not surface. This result
+  argues AGAINST promoting 8 probes to the official pipeline without
+  further investigation of why phases 3/6 specifically fail this way
+  (e.g. is it tied to the specific contraction fraction, the frame's
+  particular non-uniform deformation shape, or something else) —
+  that diagnosis has NOT been done here.
+- Physical sanity checked? by whom?: Claude — quantitative (known real
+  registration-derived radii, same ground truth as runs -49/-54/-59) +
+  visual (8-frame filmstrip) + direct comparison against both prior
+  4-probe results before drawing the mixed-result conclusion.
+- Gate passed? (Y/N): N/A — full-cycle validation, revealed an open
+  problem rather than closing one.
+- Next action: do NOT promote 8 probes to the official pipeline based
+  on current evidence — the motion-cycle result is genuinely mixed and
+  includes a confidently-wrong failure mode not yet diagnosed. If this
+  thread continues, the next step should be diagnosing WHY phases 3/6
+  fail (not just noting that they do) before any further porting
+  decision, following this project's standing discipline of diagnosing
+  root causes rather than averaging over failures.
+

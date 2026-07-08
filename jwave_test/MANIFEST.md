@@ -1045,3 +1045,40 @@ not spun as a win.
 
 Figures regenerated: `jwave_test/results/figures/phase3_mri_irregular_ring_reconstruction_patient001.png`,
 `..._patient023.png`, `jwave_test/results/figures/phase3_mri_motion_cycle_reconstruction_patient023.png`.
+
+**REAL 45/135-DEGREE CALIBRATION MEASURED (run -60), REPLACING THE
+INTERPOLATION ASSUMPTION — discovered old 4-probe 90/180 values don't
+transfer to the 8-probe geometry.** `src/phase3_8probe_calibration_45_135.py`
+measured all 4 non-monostatic baseline categories (45/90/135/180
+degrees) self-consistently within the 8-probe geometry at R=41/71/88,
+after finding the 8-probe geometry's own 90-degree measurement (0.238
+at R=41) does NOT match the original 4-probe calibration (0.136) —
+cross-geometry calibration mixing is invalid. `phase3_mri_8probe_test.py`'s
+weight model updated to an exact per-category lookup (no baseline-angle
+interpolation needed — 8 probes at 45-degree spacing only ever produce
+separations of exactly 0/45/90/135/180 degrees).
+
+**Re-verified with real calibration (run -61): patient023 outer error
+2.43mm->0.62mm** (real, ~75% reduction — less dramatic than the
+assumption-based 0.04mm, which is now understood to have been partly
+an artifact of the unvalidated interpolation). Homogeneous control's
+outer channel shows confidence=inf (same known false-positive risk as
+before, now on a different channel) — not resolved.
+
+**Breadth-of-validation (runs -62/-63)**: applied to patient001 static
+(run -62) — confirms clean, matches/slightly betters the 4-probe
+pipeline (0.03mm/0.18mm), homogeneous control fully low-confidence
+here. Applied to patient023's FULL real motion cycle (run -63,
+`src/phase3_mri_8probe_motion_cycle_test.py`, new isolated script) —
+**MIXED result, does NOT uniformly outperform 4 probes**: outer RMSE
+improved (1.7482mm vs 4-probe's 1.9053mm) but inner RMSE got WORSE
+(0.9978mm vs 0.8354mm), and phases 3/6 show a genuine NEW failure mode
+— a confidently-wrong (confidence=inf) inner overshoot (fitted 7.10mm
+vs true 5.40mm) not seen in any static test. **Recommendation: do NOT
+promote 8 probes to the official pipeline** without first diagnosing
+why phases 3/6 fail this way — an open, not-yet-investigated problem.
+
+New files: `jwave_test/src/phase3_8probe_calibration_45_135.py`,
+`jwave_test/src/phase3_mri_8probe_motion_cycle_test.py`,
+`jwave_test/results/figures/phase3_mri_8probe_localmax_test_patient001.png`,
+`jwave_test/results/figures/phase3_mri_8probe_motion_cycle_test_patient023.png`.
