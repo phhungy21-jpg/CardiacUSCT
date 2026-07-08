@@ -1322,3 +1322,33 @@ New files: `jwave_test/src/phase3_mri_16probe_test.py`,
 `jwave_test/results/mri_16probe_calibration.npz`,
 `jwave_test/results/figures/phase3_blind_shape_reconstruction_test_16probe_circle.png`,
 `jwave_test/results/figures/phase3_blind_shape_reconstruction_test_16probe_heart.png`.
+
+**INJECTIVITY PROBE, TIP VS. NOTCH (run -74): neither pure hallucination-
+hazard nor pure readout bug — a third, harder case.** Direct test of
+whether a learned (U-Net) prior for blind reconstruction would be
+recovering real information or hallucinating, run BEFORE training
+anything: `src/phase3_tip_notch_sensitivity_test.py` perturbs ONE true
+vertex of the heart phantom (tip or notch) by +5 cells radially,
+resimulates, and compares the RAW backprojection score curve along that
+ray (no peak-selection algorithm involved) before vs. after. Notch:
+raw argmax tracks 3.5 of the true 5-cell shift, and the sign of change
+at both the old and new true-R positions is physically correct (score
+drops where the boundary left, rises where it arrived) — information is
+genuinely present and cleanly exploitable, matching run -72's already-
+good classical result. Tip: raw argmax is stuck on a dominant, fixed
+ghost peak (R~17 cells, nowhere near the true 50-55 range) that barely
+moves with the true shift — confirming a geometry-driven artifact,
+consistent with runs -42/-44/-72 — but the score AT the true tip
+location does shift measurably (+11 to +27%), ruling out zero
+information; the shift's DIRECTION is physically inconsistent (score
+rose, not fell, where the boundary moved away from), the signature of a
+noise/crosstalk-dominated residual rather than a clean specular return.
+**Conclusion: a learned prior could plausibly improve tip accuracy by
+learning to discount the dominant ghost, but any LARGE accuracy win
+specifically at the tip should be treated as suspect (hallucination)
+rather than trusted recovery — a win at the notch is much more
+credible.** Gives a concrete, falsifiable pre-registered check to apply
+to any future trained model. Commit is LOCAL ONLY, not pushed.
+
+New files: `jwave_test/src/phase3_tip_notch_sensitivity_test.py`,
+`jwave_test/results/figures/phase3_tip_notch_sensitivity_test.png`.

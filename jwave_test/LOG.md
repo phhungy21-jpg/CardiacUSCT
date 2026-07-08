@@ -4996,3 +4996,100 @@ forward are `jwave_test/`-specific (Phase 2 work).
   commit is local-only on `phase3-8probe-localmax-experiment` pending
   explicit push request.
 
+### Run 2026-07-09-74 — Injectivity probe: is the tip's failure a learnable readout problem or genuine information absence? Neither — a third, harder case: a dominant fixed ghost sitting on top of a weak, physically-incoherent residual
+- Phase: 3 (per user, moving toward an ML-reconstruction direction: "since
+  blinded reconstruction failed miserably with no prior, and
+  prior-provided estimation worked so well when there is high
+  confidence, what do you think a unet provided prior for blind
+  reconstruction will behave? or is it impossible to predict" — followed
+  by "if you can check to predict the effectiveness of the use of ml,
+  run the check right away"). Answered the prediction question by
+  decomposing the failure into two candidate mechanisms before running
+  anything: (1) structured, deterministic corruption of information that
+  IS present (learnable, like the circle's between-probe ghost-cone
+  smearing that improved cleanly with probe count, runs -70/-71) vs.
+  (2) genuine information absence (not learnable without falling back to
+  a population prior, i.e. hallucination). Built a direct,
+  no-training-required test of which regime applies: perturb ONE true
+  vertex of the heart phantom (tip, run -72's failure region; notch,
+  run -72's success region) by a known +5.0 cell (~0.5mm) radial
+  displacement, holding every other vertex fixed, resimulate, and
+  compare the RAW backprojection score curve along that single ray
+  before vs. after — bypassing the local-max selector entirely, so the
+  test measures whether the acoustic data itself encodes the shift, not
+  whether the current readout algorithm finds it.
+- **New infrastructure** (self-contained, per this thread's standing
+  discipline): `phase3_tip_notch_sensitivity_test.py` —
+  `perturb_vertex()` (moves one vertex radially from `SHIFTED_CENTER` by
+  a fixed cell count, others untouched — isolates a LOCAL boundary
+  change, unlike scaling the whole shape by R) and
+  `build_medium_from_vertices()` (accepts an explicit vertex list rather
+  than requiring `heart_vertices(R)`'s single global-scale
+  parametrization). Reuses the already-validated 8-probe capture/scoring
+  primitives (`phase3_mri_8probe_test`) and the already-validated heart
+  phantom geometry (`phase3_heart_shape_offcenter_test`) unmodified.
+  3 media simulated (baseline, tip-perturbed, notch-perturbed), 8
+  transmits each.
+- **Result — NOTCH (run -72's success region): information genuinely
+  present and cleanly exploitable, confirming the classical method's
+  already-good result rather than revealing new headroom.** True
+  distance shift 20.0->25.0 cells (25%). RAW argmax (no selection
+  algorithm) tracked 3.5 of the true 5.0-cell shift (21.0->24.5), and
+  critically the DIRECTION at both the old and new true-R positions is
+  physically sane: score at the old position (R=20) dropped
+  (0.000513->0.000379) and score at the new position (R=25) rose
+  (0.000343->0.000576) — exactly the signature of a real boundary
+  moving away from one point and toward another.
+- **Result — TIP (run -72's failure region): a third case, harder than
+  either pure hallucination-hazard or a simple readout bug.** The raw
+  argmax is STUCK at R~17 cells in BOTH the baseline and the perturbed
+  medium (true range is 50-55 cells) and barely moves (+0.5 of the true
+  +5.0-cell shift) — confirming a dominant, fixed, geometry-driven ghost
+  peak that doesn't track the real boundary at all (consistent with the
+  mechanism diagnosed in runs -42/-44/-72). But the score value
+  SPECIFICALLY at the true tip location is NOT zero-sensitivity: it
+  shifts measurably with the perturbation (+11% to +27% relative
+  change) — ruling out complete information absence. The catch: the
+  DIRECTION at the true tip location is physically INCONSISTENT — score
+  at the old position (R=50) went UP, not down, when the boundary moved
+  away from it (0.000193->0.000214) — the opposite of clean
+  boundary-tracking behavior, the signature of a signal dominated by
+  noise/crosstalk rather than a coherent specular return. Locality
+  control confirmed the tip perturbation does NOT leak into the notch
+  ray's own argmax (21.0 vs 21.5, effectively unchanged), so the tip
+  result isn't a cross-contamination artifact of the test itself.
+- **Conclusion for the ML-prior question this test was designed to
+  answer**: not a binary "learnable ghost vs. true void." The tip is a
+  large, deterministic, probe-geometry-driven artifact (in principle
+  learnable/suppressible, same argument as the circle's ghost-cone
+  narrowing) sitting on top of a weak, physically-incoherent residual
+  signal. A learned prior could plausibly improve tip-region accuracy by
+  discounting the dominant ghost, but the genuine underlying signal
+  there is too weak and too directionally inconsistent to support
+  confident recovery — meaning any LARGE accuracy win a U-Net shows
+  specifically at the tip should be treated as suspect (population-prior
+  hallucination filling a plausible convex bump) rather than trusted as
+  recovered acoustic evidence, whereas a win at the notch is much more
+  likely genuine. This gives a concrete, falsifiable prediction to check
+  against an actual trained model later, rather than an untestable
+  guess.
+- Physical sanity checked? by whom?: Claude — locality control (tip
+  perturbation doesn't move the notch ray) run alongside the main test
+  to rule out a test-construction artifact before interpreting the
+  tip/notch asymmetry as physical; direction-of-change (not just
+  magnitude) checked at both ray locations specifically because a naive
+  magnitude-only read would have missed the tip's physically-inconsistent
+  sign.
+- Gate passed? (Y/N): N/A — diagnostic/exploratory test informing the ML
+  direction, not a phase gate.
+- Next action: if a U-Net (or any learned prior) is trained on this
+  phantom's backprojection images, use this same tip/notch asymmetry as
+  a pre-registered check on the trained model — expect notch-region
+  accuracy gains to be trustworthy and tip-region gains to require an
+  input-perturbation/ablation test before being believed, exactly as
+  predicted here. The two follow-ups flagged in runs -72/-73 (non-blind
+  global shape-fit at more probes; real MRI shape blind test) remain
+  open and untouched by this result. Per standing instruction, NOT
+  pushed to origin — commit is local-only on
+  `phase3-8probe-localmax-experiment` pending explicit push request.
+
