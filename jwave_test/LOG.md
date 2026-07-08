@@ -4574,3 +4574,91 @@ forward are `jwave_test/`-specific (Phase 2 work).
   actual estimator (only the diagnostic flag from run -65 exists) —
   remains the next concrete step if this thread continues.
 
+### Run 2026-07-08-68 — Robust temporal estimator implemented and tested: real RMSE improvement on patient023, but the safety validation on a genuine abrupt event is only a PARTIAL pass, not clean
+- Phase: 3 (implementing the 3rd literature-grounded direction from run
+  -67 — robust/outlier-aware Kalman-style filtering + cardiac speckle-
+  tracking's confidence-gated spatiotemporal regularization). Per user:
+  "continue to try the next mode of calibration" (interpreted as: turn
+  run -65's diagnostic-only temporal-consistency flag into an actual
+  estimator, the explicitly-flagged next step).
+- **Design** (`src/phase3_robust_temporal_estimator.py`): a single-step,
+  precision-weighted (Kalman-style) fusion —
+  `posterior_i = (precision_own_i * own_i + precision_prior_i * prior_i)
+  / (precision_own_i + precision_prior_i)`, where `precision_own_i` is
+  derived from that frame's own Coherence Factor (run -67, NOT a fixed
+  constant), and `prior_i` is the average of the two temporal
+  neighbors' OWN estimates, with `precision_prior_i` itself informed by
+  the neighbors' average precision (a prior built from two also-low-
+  confidence neighbors is trusted less). The raw per-frame value is
+  NEVER discarded — always reported alongside the posterior, per the
+  user's explicit safety concern about masking genuine abrupt real
+  motion (direct extension of the "never assume constant anatomy"
+  standing rule to the temporal domain).
+- **Test 1 (patient023's already-computed 8-probe motion-cycle
+  results, run -67 — no new simulation)**: precision-weighted fusion
+  gives a real, substantial RMSE improvement — inner 0.9963mm ->
+  0.4363mm, outer 1.7488mm -> 0.9453mm — driven mostly by dramatically
+  fixing the one catastrophic frame (phase 2/5: inner err 1.70mm ->
+  0.15mm, outer 2.49mm -> 0.13mm). **Real, honestly-reported tradeoff**:
+  a few already-decent frames get slightly WORSE (e.g. inner phase 0/7:
+  0.30mm -> 0.51mm) because their CF, while okay, isn't dramatically
+  above the neighbor-based prior's precision — the net aggregate is a
+  clear win, but not a uniform one.
+- **Tuning attempt tested and REJECTED**: tried a `sharpness` exponent
+  (cubing the precision ratio) to more decisively favor "okay" frames
+  over the prior. This made things WORSE (posterior RMSE rose from
+  0.4363mm to 0.5220mm inner, 0.9453mm to 1.3891mm outer) — because
+  every CF in this specific patient's cycle is only moderate (0.13-0.51,
+  none near 1.0), raising a ratio that's often <1 to a power >1 shrinks
+  ALL precisions together rather than separating good from poor.
+  Reverted to the tested, better-performing linear mapping (sharpness=1)
+  rather than keeping an untested "sharper must be better" assumption —
+  caught by testing, not assumed.
+- **Test 2 (fast synthetic validation, the actual safety check)**:
+  `src/phase3_validate_temporal_estimator_synthetic.py` — an 8-frame
+  synthetic ring cycle, CONSTANT inner_R=60 cells at every frame EXCEPT
+  frame 3 (a deliberate, large, one-off jump to inner_R=45, modeling a
+  single ectopic-beat-like event), using the SAME 8-probe + local-max +
+  real-calibration pipeline on the standard N=(300,300) toy domain (no
+  oversized real-anatomy search grid needed, but this still took
+  ~15-20 minutes wall-clock for 8 full-transmit-set simulations).
+  **Result: a PARTIAL pass, not a clean one.** The jump frame's own
+  precision (1.12) correctly comes out higher than its neighbors'
+  (0.54) — direction is right, its own evidence IS correctly identified
+  as more trustworthy. But the fusion still meaningfully DEGRADES an
+  otherwise-perfect raw measurement: raw fit error was 0.09mm (CF=0.527,
+  a clean single genuine peak); posterior error is 0.58mm — a ~6x
+  degradation, even though the frame's own evidence was genuinely
+  strong. **Caught my own auto-generated verdict being too lenient
+  before reporting it as a clean pass**: the script's built-in
+  pass/fail check used a loose threshold (`posterior_err < raw_err +
+  0.5mm`) that this result barely satisfies (0.58 vs 0.59mm) — a
+  borderline pass by construction, not evidence of a well-designed
+  safety margin. Flagged this to the user explicitly rather than
+  accepting the automated "PRESERVED (safe)" label at face value.
+- **Honest conclusion**: the current continuous precision-weighted
+  blend is DIRECTIONALLY safe (a real change is never fully erased or
+  inverted — the posterior stays much closer to the true jump value
+  than to the smoothed-neighbor value) but is NOT YET a clean,
+  production-ready design — even a correctly-identified, genuinely
+  reliable measurement gets diluted more than it should. **Do not treat
+  this estimator as validated/safe to rely on as-is.**
+- Physical sanity checked? by whom?: Claude — built and ran an actual
+  adversarial/safety test (not just checked the favorable case),
+  applied the SAME rigor to my own estimator's automated verdict that
+  this project applies to every other claimed result, and reported the
+  partial-pass finding rather than the more favorable-sounding "safe"
+  headline the auto-check initially suggested.
+- Gate passed? (Y/N): N/A — estimator design + partial validation, not
+  a gated deliverable.
+- Next action: the likely fix is a HARD GATE rather than a pure
+  continuous blend — only invoke the neighbor-based prior at all when a
+  frame's own CF falls below some ABSOLUTE floor (e.g. calibrated
+  against the homogeneous-control CF distribution already measured in
+  runs -57/-61/-67), and trust the frame's own value fully otherwise,
+  rather than always blending proportionally by a precision ratio that
+  can still meaningfully dilute a good-but-not-perfect measurement. Not
+  yet designed or tested. Per user instruction this run, NOT pushed to
+  origin — commits are local-only on `phase3-8probe-localmax-experiment`
+  pending an explicit push request.
+

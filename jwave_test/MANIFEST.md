@@ -1171,3 +1171,32 @@ boundary's structurally lower signal redundancy (runs -44/-53), not a
 fixable confidence-formula issue. Robust/outlier-aware temporal
 filtering (the third literature-grounded direction) remains
 unimplemented as an actual estimator — still just a diagnostic flag.
+
+**ROBUST TEMPORAL ESTIMATOR IMPLEMENTED + TESTED (run -68): real RMSE
+win on patient023, but safety validation is only a PARTIAL pass.**
+`src/phase3_robust_temporal_estimator.py` — precision-weighted
+(Kalman-style) fusion of each frame's own CF-derived precision against
+a neighbor-based prior (never discards the raw value). On patient023's
+already-computed results: inner RMSE 0.9963->0.4363mm, outer
+1.7488->0.9453mm, mostly from fixing the one catastrophic frame
+(phase 2/5); a few already-decent frames get slightly worse (honest
+tradeoff, not hidden). A `sharpness` exponent tuning attempt was tested
+and REJECTED (made things worse — all CFs in this cycle are moderate,
+so a power>1 shrank precision separation instead of sharpening it).
+**Safety validation** (`src/phase3_validate_temporal_estimator_synthetic.py`,
+a fast synthetic ring cycle with one deliberate genuine jump modeling
+an ectopic beat): direction is safe (a real change is never erased or
+inverted), but the fusion still meaningfully degrades an otherwise-
+perfect measurement (0.09mm raw error -> 0.58mm posterior error) even
+when that frame's own evidence is correctly identified as more
+reliable than its neighbors. Caught the script's own auto-generated
+"PRESERVED (safe)" verdict being a borderline pass by construction
+(loose 0.5mm threshold) before accepting it. **Conclusion: NOT yet
+validated/safe to rely on as-is** — likely fix is a hard gate (trust
+own value fully above some absolute CF floor, rather than always
+continuously blending), not yet designed. Per user instruction, this
+run's commits are LOCAL ONLY on `phase3-8probe-localmax-experiment`,
+not pushed to origin.
+
+New files: `jwave_test/src/phase3_robust_temporal_estimator.py`,
+`jwave_test/src/phase3_validate_temporal_estimator_synthetic.py`.
