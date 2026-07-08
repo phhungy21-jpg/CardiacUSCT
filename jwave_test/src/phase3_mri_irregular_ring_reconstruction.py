@@ -53,7 +53,7 @@ from phase3_backprojection_shape_fit_triangle import (
     _SRC, _RCV, t_arr, c_ref, _ENVELOPE_GROUP_DELAY_S,
     img_rows, img_cols, center, dx, N, domain, p3cfg, labels,
 )
-from phase3_ring_curvature_weighted_fit import pair_weight_at_R
+from phase3_ring_curvature_weighted_fit import pair_weight_at_R, select_best_local_peak
 
 from matplotlib import pyplot as plt
 import os
@@ -150,8 +150,12 @@ def fit_scale_curvature_weighted(pairs, ext_theta, ext_r, scale_grid, origin, im
             w = pair_weight_at_R(tx, rx, np.mean(d_vals))  # mean radius at this scale as the curvature proxy
             total += w * interp(pts).sum()
         scores[i] = total
-    best_idx = np.argmax(scores)
-    return scale_grid[best_idx], scores
+    # Local-max-only selection (ported from run -57/-58 after the smoke
+    # test in run -58 confirmed it reproduces patient001's/the synthetic
+    # ring's already-validated results exactly) -- disqualifies a
+    # monotonic climb into the guard-band cutoff by construction.
+    best_scale, is_genuine_peak, confidence = select_best_local_peak(scale_grid, scores)
+    return best_scale, scores, is_genuine_peak, confidence
 
 
 SCALE_GRID = np.arange(0.7, 1.31, 0.005)
@@ -226,26 +230,26 @@ if __name__ == "__main__":
     print("=== Simulating homogeneous reference ===")
     pairs_ref = capture_all_pairs(build_medium_homogeneous())
 
-    fitted_s_in, scores_in = fit_scale_curvature_weighted(pairs_real, ext_theta_in, ext_r_in, SCALE_GRID, lv_centroid_dom, img_rows_g, img_cols_g)
-    fitted_s_in_ref, _ = fit_scale_curvature_weighted(pairs_ref, ext_theta_in, ext_r_in, SCALE_GRID, lv_centroid_dom, img_rows_g, img_cols_g)
+    fitted_s_in, scores_in, in_is_peak, in_conf = fit_scale_curvature_weighted(pairs_real, ext_theta_in, ext_r_in, SCALE_GRID, lv_centroid_dom, img_rows_g, img_cols_g)
+    fitted_s_in_ref, _, _, in_ref_conf = fit_scale_curvature_weighted(pairs_ref, ext_theta_in, ext_r_in, SCALE_GRID, lv_centroid_dom, img_rows_g, img_cols_g)
 
     fitted_inner_mean_radius = fitted_s_in * ext_r_in.mean()
     scale_grid_guarded = SCALE_GRID[np.abs(SCALE_GRID * ext_r_out.mean() - fitted_inner_mean_radius) > GUARD_BAND_CELLS]
-    fitted_s_out, scores_out = fit_scale_curvature_weighted(pairs_real, ext_theta_out, ext_r_out, scale_grid_guarded, ring_centroid_dom, img_rows_g, img_cols_g)
-    fitted_s_out_ref, _ = fit_scale_curvature_weighted(pairs_ref, ext_theta_out, ext_r_out, SCALE_GRID, ring_centroid_dom, img_rows_g, img_cols_g)
+    fitted_s_out, scores_out, out_is_peak, out_conf = fit_scale_curvature_weighted(pairs_real, ext_theta_out, ext_r_out, scale_grid_guarded, ring_centroid_dom, img_rows_g, img_cols_g)
+    fitted_s_out_ref, _, _, out_ref_conf = fit_scale_curvature_weighted(pairs_ref, ext_theta_out, ext_r_out, SCALE_GRID, ring_centroid_dom, img_rows_g, img_cols_g)
 
     in_err_mm = abs(fitted_s_in - 1.0) * ext_r_in.mean() * dx[0] * 1e3
     out_err_mm = abs(fitted_s_out - 1.0) * ext_r_out.mean() * dx[0] * 1e3
     locked = abs(fitted_s_out * ext_r_out.mean() - fitted_s_in * ext_r_in.mean()) < 3.0
 
-    print(f"\n--- Result ---")
+    print(f"\n--- Result (local-max-only selection) ---")
     print(f"  inner (LV cavity): fitted scale={fitted_s_in:.3f} (true=1.000), "
-          f"mean-radius error={in_err_mm:.2f}mm")
+          f"mean-radius error={in_err_mm:.2f}mm, genuine_local_max={in_is_peak}, confidence={in_conf:.2f}")
     print(f"  outer (epicardium): fitted scale={fitted_s_out:.3f} (true=1.000), "
-          f"mean-radius error={out_err_mm:.2f}mm")
+          f"mean-radius error={out_err_mm:.2f}mm, genuine_local_max={out_is_peak}, confidence={out_conf:.2f}")
     print(f"  outer locked to inner? {locked}")
-    print(f"  homogeneous-medium control: inner fit scale={fitted_s_in_ref:.3f}, "
-          f"outer fit scale={fitted_s_out_ref:.3f} (should be meaningless/low-confidence)")
+    print(f"  homogeneous-medium control: inner fit scale={fitted_s_in_ref:.3f} (conf={in_ref_conf:.2f}), "
+          f"outer fit scale={fitted_s_out_ref:.3f} (conf={out_ref_conf:.2f}) (should be low-confidence)")
 
     # --- Figure: score(s) curves + accumulator with true/fitted contour overlaid ---
     fig, axes = plt.subplots(1, 3, figsize=(16, 5.5))

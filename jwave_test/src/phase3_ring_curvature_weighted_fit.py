@@ -83,6 +83,45 @@ def pair_weight_at_R(tx, rx, R):
     return _linear_weight(R, _CAL_R, _CAL_ANTIPODAL)
 
 
+def select_best_local_peak(scale_grid, scores, step_tol=1.5):
+    """Require the winning candidate to be a genuine LOCAL MAXIMUM
+    (rises then falls on both sides), not just the highest score in the
+    allowed range -- ported from the isolated smoke-tested fix (see
+    `phase3_mri_8probe_test.py`, run -57/-58) after confirming it
+    reproduces every already-validated result exactly (run -58's smoke
+    test: patient001 real-shape and this ring phantom's ED/ES-adjacent
+    frames were all unchanged). Disqualifies a monotonic climb into a
+    guard-band cutoff (leakage from the adjacent excluded region) by
+    construction, without presupposing where the true answer is.
+    `scale_grid` (here, R_grid) may be discontinuous -- the guard band
+    removes a contiguous middle chunk -- so `find_peaks` is run
+    separately on each contiguous segment, matching what it already
+    does at a true array boundary."""
+    diffs = np.diff(scale_grid)
+    step = np.median(diffs)
+    gap_idx = np.where(diffs > step * step_tol)[0]
+    boundaries = [0] + [i + 1 for i in gap_idx] + [len(scale_grid)]
+
+    all_peak_positions, all_peak_scores = [], []
+    for lo, hi in zip(boundaries[:-1], boundaries[1:]):
+        seg_scores = scores[lo:hi]
+        peak_idx, _ = find_peaks(seg_scores)
+        for p in peak_idx:
+            all_peak_positions.append(lo + p)
+            all_peak_scores.append(seg_scores[p])
+
+    if not all_peak_positions:
+        # no genuine interior local max anywhere -- fall back to global
+        # argmax, but flag it as untrustworthy (confidence=0), not high.
+        best_idx = int(np.argmax(scores))
+        return scale_grid[best_idx], False, 0.0
+
+    order = np.argsort(all_peak_scores)[::-1]
+    best_pos = all_peak_positions[order[0]]
+    confidence = all_peak_scores[order[0]] / all_peak_scores[order[1]] if len(order) > 1 else np.inf
+    return scale_grid[best_pos], True, confidence
+
+
 def fit_circle_radius_curvature_weighted(pairs, R_grid, origin=center):
     """Same global template-match principle, but each pair's
     contribution at candidate R is scaled by pair_weight_at_R(R) BEFORE
@@ -116,15 +155,8 @@ def fit_circle_radius_curvature_weighted(pairs, R_grid, origin=center):
             total += w * interp(pts).sum()
         scores[i] = total
 
-    best_idx = np.argmax(scores)
-    best_R = R_grid[best_idx]
-    peak_idx, _ = find_peaks(scores)
-    if len(peak_idx) >= 2:
-        sorted_peaks = np.sort(scores[peak_idx])[::-1]
-        confidence = sorted_peaks[0] / (sorted_peaks[1] + 1e-12)
-    else:
-        confidence = np.inf
-    return best_R, scores, confidence
+    best_R, is_genuine_peak, confidence = select_best_local_peak(R_grid, scores)
+    return best_R, scores, confidence, is_genuine_peak
 
 
 GUARD_BAND_CELLS = 8.0  # exclude outer-grid candidates within this distance of the already-fitted inner radius
@@ -145,16 +177,16 @@ if __name__ == "__main__":
         pairs_tri = capture_all_pairs(build_medium_ring(inner_R_true))
         pairs_ref = capture_all_pairs(build_medium_homogeneous())
 
-        fitted_inner, _, conf_inner = fit_circle_radius_curvature_weighted(pairs_tri, INNER_R_GRID)
-        fitted_inner_ref, _, _ = fit_circle_radius_curvature_weighted(pairs_ref, INNER_R_GRID)
+        fitted_inner, _, conf_inner, _ = fit_circle_radius_curvature_weighted(pairs_tri, INNER_R_GRID)
+        fitted_inner_ref, _, _, _ = fit_circle_radius_curvature_weighted(pairs_ref, INNER_R_GRID)
 
         # No guard band (as before)
-        fitted_outer_plain, _, conf_outer_plain = fit_circle_radius_curvature_weighted(pairs_tri, OUTER_R_GRID)
+        fitted_outer_plain, _, conf_outer_plain, _ = fit_circle_radius_curvature_weighted(pairs_tri, OUTER_R_GRID)
 
         # WITH guard band around the already-fitted inner radius
         outer_grid_guarded = OUTER_R_GRID[np.abs(OUTER_R_GRID - fitted_inner) > GUARD_BAND_CELLS]
-        fitted_outer_guarded, _, conf_outer_guarded = fit_circle_radius_curvature_weighted(pairs_tri, outer_grid_guarded)
-        fitted_outer_ref, _, _ = fit_circle_radius_curvature_weighted(pairs_ref, OUTER_R_GRID)
+        fitted_outer_guarded, _, conf_outer_guarded, _ = fit_circle_radius_curvature_weighted(pairs_tri, outer_grid_guarded)
+        fitted_outer_ref, _, _, _ = fit_circle_radius_curvature_weighted(pairs_ref, OUTER_R_GRID)
 
         inner_err_mm = abs(fitted_inner - inner_R_true) * dx[0] * 1e3
         outer_err_plain_mm = abs(fitted_outer_plain - outer_R_true) * dx[0] * 1e3

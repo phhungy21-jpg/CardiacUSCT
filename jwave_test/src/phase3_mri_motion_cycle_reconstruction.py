@@ -147,10 +147,10 @@ if __name__ == "__main__":
         medium = build_medium_real_contour(label_map)
         pairs_real = capture_all_pairs(medium)
 
-        s_in, _ = fit_scale_curvature_weighted(pairs_real, ext_theta_in, ext_r_in, SCALE_GRID, lv_centroid_dom, img_rows_g, img_cols_g)
+        s_in, _, in_is_peak, in_conf = fit_scale_curvature_weighted(pairs_real, ext_theta_in, ext_r_in, SCALE_GRID, lv_centroid_dom, img_rows_g, img_cols_g)
         fitted_inner_mean_radius = s_in * ed_mean_r_in
         scale_grid_guarded = SCALE_GRID[np.abs(SCALE_GRID * ed_mean_r_out - fitted_inner_mean_radius) > GUARD_BAND_CELLS]
-        s_out, _ = fit_scale_curvature_weighted(pairs_real, ext_theta_out, ext_r_out, scale_grid_guarded, ring_centroid_dom, img_rows_g, img_cols_g)
+        s_out, _, out_is_peak, out_conf = fit_scale_curvature_weighted(pairs_real, ext_theta_out, ext_r_out, scale_grid_guarded, ring_centroid_dom, img_rows_g, img_cols_g)
 
         fitted_inner_scale.append(s_in)
         fitted_outer_scale.append(s_out)

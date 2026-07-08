@@ -996,3 +996,52 @@ to close this gap, not yet implemented.
 
 New/updated: `jwave_test/src/phase3_mri_8probe_test.py` (extended with
 `select_best_local_peak`), `jwave_test/results/figures/phase3_mri_8probe_localmax_test_patient023.png`.
+
+**FORK PUSHED + SMOKE TESTS PASS (run -58): local-max selection is safe
+to consider porting — reproduces every already-validated result
+exactly.** Per user: "upload a fork to github first, and run those
+smoke tests". Branch `phase3-8probe-localmax-experiment` created off
+`master` and pushed to origin (master untouched); all of this session's
+work committed (23 files). Before committing: added
+`jwave_test/results/mri_irregular_ring_*.npz` and
+`mri_motion_cycle_*.npz` to `.gitignore` (new result files derived
+directly from real ACDC patient anatomy, not covered by the existing
+`data/`-only rule — caught before staging); cleaned up stale unsuffixed
+duplicate figures superseded by run -55's corrected numbers.
+Smoke test (`src/phase3_smoke_test_localmax_on_validated.py`, isolated):
+applied local-max-only selection to patient001's real-shape result and
+the synthetic ring's ED/ES-adjacent frames (run -45) using the
+EXISTING, unmodified scoring functions — **exact match in every case**,
+confirming the fix changes nothing where no tail artifact exists and
+only diverges where one does (patient023's outer boundary).
+**Status**: gap 1 (no regression) CLOSED. Gap 2 (real 45/135-degree
+calibration measurement, still an interpolation assumption) remains
+open — recommended before merging the 8-probe GEOMETRY itself as the
+new official probe layout. The local-max SELECTOR alone (independent
+of probe count) could reasonably be ported now.
+
+New files: `jwave_test/src/phase3_smoke_test_localmax_on_validated.py`.
+
+**OFFICIAL PATCH (run -59): local-max selection is now the DEFAULT in
+the shared 4-probe pipeline. patient023 result is real but MIXED, not
+the 8-probe run's clean win.** Patched
+`phase3_ring_curvature_weighted_fit.py` (added `select_best_local_peak`,
+also fixed a latent segment-splitting bug in the old confidence calc),
+`phase3_mri_irregular_ring_reconstruction.py` and
+`phase3_mri_motion_cycle_reconstruction.py` (`fit_scale_curvature_weighted`
+now returns `(scale, scores, is_genuine_peak, confidence)`). 8-probe
+geometry NOT ported — stays on the `phase3-8probe-localmax-experiment`
+branch pending the real 45/135-degree calibration measurement.
+Re-verified: patient001 static reconstruction EXACTLY matches run -55
+(0.995/0.03mm inner, 1.035/0.26mm outer) — patch is safe. patient023
+static: outer err 2.43mm->2.25mm (modest ~7%, still lands on a small
+peak at the guard-band edge, NOT the near-true bump at scale=0.94 —
+confirms the 8-probe run's big win needed the extra probes, not just
+better selection). patient023 motion cycle: outer RMSE 2.2940->1.9053mm
+but HIGHLY INCONSISTENT across phases (0.49mm at phase 2/7, ~2.0-2.3mm
+elsewhere); inner RMSE got slightly WORSE (0.8014->0.8354mm, real
+regressions at phases 2/3/6/7). Reported honestly as a mixed result,
+not spun as a win.
+
+Figures regenerated: `jwave_test/results/figures/phase3_mri_irregular_ring_reconstruction_patient001.png`,
+`..._patient023.png`, `jwave_test/results/figures/phase3_mri_motion_cycle_reconstruction_patient023.png`.

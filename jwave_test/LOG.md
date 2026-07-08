@@ -4033,3 +4033,131 @@ forward are `jwave_test/`-specific (Phase 2 work).
   Also still open from run -56: measuring the real 45/135-degree
   baseline ratio directly instead of interpolating.
 
+### Run 2026-07-08-58 — Fork pushed to GitHub; smoke tests PASS: local-max selection reproduces every already-validated result exactly
+- Phase: 3 (pre-porting validation). Per user: "upload a fork to github
+  first, and run those smoke tests" — before any decision to merge the
+  run -56/-57 8-probe + local-max fix into the official/shared
+  pipeline, per the two gaps flagged when the user asked "should i
+  path this to the official thing?": (1) confirm local-max selection
+  doesn't change patient001's/synthetic-ring's already-validated
+  numbers; (2) real 45/135-degree calibration measurement (still open,
+  not attempted this run).
+- **Fork**: created branch `phase3-8probe-localmax-experiment` off
+  `master` (`git checkout -b`), committed all of this session's
+  real-MRI-escalation and 8-probe/local-max work (23 files), and pushed
+  to `origin` — `master` is untouched. Before committing, added
+  `jwave_test/results/mri_irregular_ring_*.npz` and
+  `jwave_test/results/mri_motion_cycle_*.npz` to `.gitignore`
+  (discovered these new result files, containing rescaled/smoothed
+  masks and contours derived directly from real ACDC patient anatomy,
+  were NOT covered by the existing `data/`-only exclusion rule — same
+  caution as `phase4_pilot_dataset`, caught before staging per
+  CLAUDE.md's explicit "double check git status before staging"
+  instruction). Also cleaned up stale, unsuffixed duplicate figures
+  left over from before patient-ID parameterization (some superseded
+  by run -55's corrected numbers, renamed/removed as appropriate,
+  no data lost — the underlying reruns already regenerated corrected
+  patient-ID-suffixed versions).
+- **Smoke test** (`src/phase3_smoke_test_localmax_on_validated.py`,
+  isolated — duplicates `select_best_local_peak` locally rather than
+  importing from the experimental branch's file, and calls the
+  EXISTING, UNMODIFIED `fit_scale_curvature_weighted` /
+  `fit_circle_radius_curvature_weighted` to get the same score curves
+  used in the already-logged runs): applied local-max-only selection
+  to patient001's real-shape static reconstruction (default grid, run
+  -48's original configuration) and the synthetic ring phantom's ED +
+  ES-adjacent frames (run -45's exact two test frames). **Result: EXACT
+  MATCH in every case** — patient001 inner=1.015/0.09mm,
+  outer=1.030/0.22mm (identical to argmax); synthetic ring ED
+  inner/outer errors 0.10mm/0.00mm (identical); ES-adjacent
+  inner/outer errors 0.125mm/0.125mm (identical). Local-max-only
+  selection changed NOTHING in any of these three already-validated
+  cases — it only diverges from naive argmax where a genuine tail
+  artifact exists (patient023's outer boundary, run -57).
+- Physical sanity checked? by whom?: Claude — direct numeric comparison
+  against already-logged values (run -45, run -48) before drawing any
+  conclusion, per this project's standing discipline.
+- Gate passed? (Y/N): N/A — pre-porting validation check.
+- Observations / surprises: none — this is the reassuring, expected
+  outcome (a principled fix that only changes behavior where a real
+  problem exists should reproduce identical results everywhere else),
+  but it was verified rather than assumed, consistent with this
+  project's practice throughout.
+- Next action: the local-max-selection fix has now cleared BOTH
+  pre-porting gaps identified when first proposed: gap 1 (no
+  regression on already-validated cases) is CLOSED by this run; gap 2
+  (real 45/135-degree calibration measurement, currently an
+  interpolation assumption) remains open. Recommend closing gap 2
+  before merging the 8-probe geometry itself into the official
+  pipeline (the local-max selector alone, independent of probe count,
+  could reasonably be ported now given this run's result — that is a
+  separate, smaller decision from adopting 8 probes as the new
+  official geometry).
+
+### Run 2026-07-08-59 — Local-max selection PATCHED into the official 4-probe pipeline; patient023 re-verified: real but MIXED result, not the 8-probe fix's clean win
+- Phase: 3 (official patch). Per user: "if things look good, patch it
+  to the current pipleline, log properly" (after run -58's smoke test
+  passed). Scope deliberately limited to the local-max SELECTOR only —
+  NOT the 8-probe geometry, which still relies on the unvalidated
+  45/135-degree interpolation weight (flagged as the remaining open gap
+  in run -58).
+- **Patched files**: `phase3_ring_curvature_weighted_fit.py` (added
+  `select_best_local_peak`, replaced `fit_circle_radius_curvature_weighted`'s
+  naive-argmax + separate confidence calc with it — also fixes a
+  latent, previously-unnoticed issue in the OLD confidence calculation,
+  which ran `find_peaks` directly on a possibly-discontinuous guarded
+  R_grid without segment-splitting, same class of bug as the tail
+  artifact itself); `phase3_mri_irregular_ring_reconstruction.py`
+  (`fit_scale_curvature_weighted` now returns
+  `(scale, scores, is_genuine_peak, confidence)` instead of
+  `(scale, scores)`, imports `select_best_local_peak` from the shared
+  module rather than duplicating it); `phase3_mri_motion_cycle_reconstruction.py`
+  (updated call sites for the new 4-tuple return). All call sites
+  across all three files updated and confirmed importing/running
+  without error before any simulation was trusted.
+- **Re-verification, patient001 (must reproduce run -55 exactly)**:
+  static reconstruction — inner scale=0.995 (err=0.03mm), outer
+  scale=1.035 (err=0.26mm). **Exact match to run -55.** Confirms the
+  patch is safe on the case it wasn't designed for.
+- **Re-verification, patient023 (the actual test)** — **result is real
+  but MIXED, NOT the dramatic 8-probe fix**:
+  - Static: outer scale=0.745, err=2.25mm (was 2.43mm) — a modest ~7%
+    improvement, not the 8-probe run's 0.04mm. Visually
+    (`results/figures/phase3_mri_irregular_ring_reconstruction_patient023.png`),
+    the fit still lands on a small local max right at the guard-band
+    edge (0.745), NOT on the more genuine-looking bump near
+    scale=0.94 (score=0.87) — with only 4 probes, that near-true peak
+    still isn't the STRONGEST local max, so local-max-only selection
+    alone cannot promote it to the winner. Confirms directly (not by
+    inference) that the 8-probe run's big improvement needed the EXTRA
+    PROBES' redundancy, not just the corrected selection rule.
+  - Motion cycle (`results/figures/phase3_mri_motion_cycle_reconstruction_patient023.png`):
+    outer RMSE improved 2.2940mm -> 1.9053mm, but HIGHLY INCONSISTENTLY
+    across phases (0.49mm at phase 2/7, ~2.0-2.3mm at every other
+    phase) — unlike the stable, uniform-across-phases signature that
+    indicated a structural cause in run -54. **Inner RMSE got slightly
+    WORSE: 0.8014mm -> 0.8354mm**, with real regressions at phases
+    2/3/6/7 (jumping to 1.13-1.14mm from ~0.09-0.34mm previously) — the
+    local-max rule occasionally picks a worse genuine peak than argmax
+    did at those specific phases' score curves. **This is a real,
+    reported mixed result, not spun as a win.**
+- Physical sanity checked? by whom?: Claude — direct numeric comparison
+  against run -55 (patient001, must match) and runs -51/-54 (patient023,
+  4-probe baseline) before drawing conclusions; visual inspection of
+  both regenerated figures.
+- Gate passed? (Y/N): N/A — pipeline patch + validation.
+- Observations / surprises: the inconsistent, phase-dependent behavior
+  for patient023's motion cycle (helps a lot at some phases, hurts
+  slightly at others) is itself informative: it shows local-max-only
+  selection is sensitive to the SPECIFIC shape of each frame's score
+  curve, not a uniform improvement — reinforcing that the real fix for
+  patient023's structural limitation is more probe angles (run -56),
+  not just a better selection rule on the same 4-probe information.
+- Next action: the local-max selector is now the official pipeline's
+  default (safe, matches every already-validated result, and gives a
+  small real improvement where it can). The 8-probe geometry remains
+  on the separate `phase3-8probe-localmax-experiment` branch, not
+  merged — still blocked on the real 45/135-degree calibration
+  measurement (run -56's flagged gap) before being considered for
+  official adoption.
+
