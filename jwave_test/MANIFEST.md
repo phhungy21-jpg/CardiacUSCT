@@ -1120,3 +1120,26 @@ scoped as a separate, larger undertaking, not yet implemented.
 
 New files: `jwave_test/src/phase3_diagnose_8probe_phase3_failure.py`,
 `jwave_test/results/figures/phase3_diagnose_8probe_phase3_failure_patient023.png`.
+
+**DEFORMATION-MODEL HYPOTHESIS TESTED AND REFUTED (run -66), before
+building it.** Before committing to the larger scale+translation+
+deformation-mode undertaking (scoped in run -65), tested its core
+premise directly and cheaply: `src/phase3_diagnose_true_shape_signal.py`
+refit phase 2's (frac=0.61) inner boundary against that SAME frame's
+own TRUE contour (the best possible template — literally the correct
+answer). If shape mismatch were the cause of the overshoot failure,
+this should produce a sharp peak at scale=1.0. **It did not** — same
+featureless, monotonic-decline curve as the fixed-ED-template case (run
+-64), just relocated within a too-narrow scale window on the first
+attempt (a false-positive "peak" was caught and corrected via visual
+re-inspection before being reported). **Conclusion: do NOT build the
+deformation-mode model on the strength of this failure** — the phase
+3/6 problem is a signal-availability issue (too weak/incoherent to
+detect with ANY shape hypothesis), not a template-shape problem. If
+deformation modes are still worth pursuing, they need a different,
+verified motivating case. Open question, not investigated further: why
+frac=0.61 specifically produces weak inner-boundary signal for
+patient023 when frac=0.95 (phase 4/5) works excellently.
+
+New files: `jwave_test/src/phase3_diagnose_true_shape_signal.py`,
+`jwave_test/results/figures/phase3_diagnose_true_shape_signal_patient023.png`.

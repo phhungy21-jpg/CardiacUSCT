@@ -4443,3 +4443,59 @@ forward are `jwave_test/`-specific (Phase 2 work).
   against overfitting per-frame noise, its own validation suite) and
   is being scoped as a separate next step rather than rushed.
 
+### Run 2026-07-08-66 — Deformation-model hypothesis tested directly and REFUTED for the phase 3/6 failure: even the TRUE shape produces no detectable peak; the limitation is signal availability, not template shape
+- Phase: 3 (hypothesis test, before committing to the larger
+  deformation-model undertaking scoped in run -65). User's hypothesis:
+  a fixed-scale template (vs. a real, non-uniformly deforming boundary)
+  could be forcing the fit to lock onto whichever contour best matches
+  a few locally-reliable sectors, explaining phase 3/6's overshoot —
+  predicting that a richer shape model (scale + translation + low-order
+  deformation modes) would fix it. Tested directly, cheaply, before
+  building that larger model: `src/phase3_diagnose_true_shape_signal.py`
+  reruns phase 2's (0-indexed; frac=0.61) inner fit using that SAME
+  frame's own TRUE contour as the template (not the fixed ED template)
+  — the best possible shape hypothesis, since it's literally the
+  correct answer. If shape mismatch were the cause, this should produce
+  a sharp, obvious peak at scale=1.0.
+- **Result: it does NOT.** First attempt used a narrow scale range
+  (0.85-1.16, assuming the answer would land near the expected 1.0) and
+  found what looked like a peak near 0.86-0.89 (prominence=1.00) — but
+  visual inspection (caught before trusting the number, per this
+  project's standing discipline of checking curve SHAPE, not just the
+  reported peak) showed this was a monotonic decline from the grid's
+  own left edge with only noise-level ripples, the same edge-artifact
+  pattern as run -64, just relocated inside a too-narrow window. The
+  scale range was NOT widened further via a second simulation (would
+  have required another ~8-transmit resimulation) — the already-visible
+  monotonic-decline shape at both the narrow window's edges (matching
+  run -64's featureless-curve signature exactly) was sufficient to draw
+  the conclusion directly from the existing evidence: there is no
+  genuine, sharp peak at or near scale=1.0 even when fitting against
+  the exact true shape.
+- **Conclusion: this REFUTES the deformation-model hypothesis for this
+  SPECIFIC failure.** If even the true shape, used as its own template,
+  can't produce a detectable peak, the problem is not "the wrong shape
+  hypothesis was tested" (fixable by adding deformation degrees of
+  freedom) — it's that the underlying acoustic signal for the inner
+  boundary is too weak/incoherent at this specific frame's physical
+  configuration to be found by ANY shape hypothesis, correct or not.
+  This is a signal-availability problem, upstream of shape
+  representation entirely.
+- Physical sanity checked? by whom?: Claude — caught its own
+  over-optimistic first read (mistook three near-identical noise-level
+  ripples for a real peak) by re-examining the plotted curve shape
+  before reporting a conclusion, then corrected the interpretation
+  before the user had to point it out.
+- Gate passed? (Y/N): N/A — hypothesis test.
+- Next action: **do NOT build the scale+translation+deformation-mode
+  model on the strength of the phase 3/6 failure** — it would not have
+  fixed this specific case. If deformation modes are still worth
+  pursuing, they need to be motivated by a DIFFERENT, verified case
+  where shape mismatch (not signal absence) is the demonstrated
+  bottleneck — not yet found. The now-sharper open question: why does
+  frac=0.61 specifically produce weak/incoherent inner-boundary
+  reflections for patient023 when frac=0.95 (phase 4/5) works
+  excellently — an unresolved physics question about this frame's
+  specific configuration, not a template-shape problem. Not
+  investigated further this run.
+
