@@ -5093,3 +5093,97 @@ forward are `jwave_test/`-specific (Phase 2 work).
   pushed to origin — commit is local-only on
   `phase3-8probe-localmax-experiment` pending explicit push request.
 
+### Run 2026-07-09-75 — Generalizing the injectivity probe: run -74's tip/notch framing CORRECTED — clean acoustic recoverability is the rare exception (1/14 tested locations), not a convex/concave-predictable split, and does not transfer to real anatomy
+- Phase: 3. Per user's direct objection to run -74: "that's just tested
+  information in 1 patient" — correct, and more precisely 1 synthetic
+  shape, 1 location each for "tip"/"notch", 1 perturbation magnitude, 1
+  probe count. Offered two follow-ups (cheap: extend to all 10 vertices
+  of the same phantom; harder: same method on real anatomy) and asked
+  which; user's reply: "sure, why not both pt because they are 2
+  contrast cases" (patient001 mild vs. patient023 strong contraction —
+  do both, and do the real-anatomy half on both patients).
+- **New infrastructure** (self-contained, per this thread's standing
+  discipline): `phase3_heart_all_vertices_sensitivity_test.py` — reuses
+  run -74's `perturb_vertex`/`build_medium_from_vertices`/
+  `score_along_ray` unmodified, loops over all 10 heart-phantom
+  vertices (each vertex's own ray angle derived analytically from its
+  unit coordinates, verified against run -74's hardcoded tip=180deg/
+  notch=0deg), same +5.0-cell perturbation, same 8-probe geometry.
+  `phase3_real_contour_sensitivity_test.py` — adapts the method to a
+  non-polygon real contour: instead of moving a vertex, adds a smooth,
+  localized (8-degree Gaussian) angular bump of +5.0 cells to the real
+  measured r(theta) at a landmark angle only, on an ISOLATED
+  single-boundary phantom (myocardium vs. chest-wall-proxy only, same
+  isolation convention as the calibration measurements in runs
+  -44/-53/-60/-73 — deliberately not the full two-boundary ring, to
+  keep the test about outer-boundary recoverability alone). Landmarks
+  chosen by measuring the real contour's own curvature (standard polar
+  curve formula, circularly padded for stable finite differences at the
+  wraparound) and picking the sharpest (max |curvature|) and smoothest
+  (min |curvature|) points, per boundary, per patient — not
+  hand-picked.
+- **Result 1 (synthetic phantom, all 10 vertices): the notch is a rare
+  outlier, not representative of "concave = clean."** Only 1/10
+  vertices (vertex 5, the notch) is genuinely CLEAN (tracks the true
+  shift AND correct physical direction). 4/10 are GHOST-DOMINATED
+  (physically-backwards direction, frozen argmax) — vertices 0 (tip),
+  1, 6, 9, none of which are the sharpest/most-convex point by any
+  obvious measure (vertex 1/9 are ordinary flank points, vertex 6 sits
+  right next to the notch but behaves oppositely to it). 5/10 are
+  PARTIAL (physically-correct direction of change, but the argmax
+  itself barely moves or moves for unrelated reasons — vertex 2's -18.5
+  cell shift went the "correct" way only by landing near a DIFFERENT,
+  unrelated peak, not by smooth tracking). Run -72/-74's implicit
+  "convex tip bad, concave notch good" story was built from n=2 and
+  happened to sample the single best point and a middling-bad one, not
+  a representative pair.
+- **Result 2 (real anatomy, patient001 + patient023, sharp/smooth
+  curvature landmarks): WORSE than the synthetic case, and the
+  synthetic convex/concave heuristic does not transfer at all.** 0/4
+  landmarks CLEAN. patient001: BOTH its sharp (theta=92.1deg) and
+  smooth (theta=99.1deg) landmarks are completely GHOST-DOMINATED — the
+  raw argmax does not move AT ALL (75.0->75.0, 78.0->78.0) regardless of
+  which point is perturbed, a more severe insensitivity than even the
+  synthetic tip's weak +0.5-cell response. patient023: its SHARP
+  landmark (theta=32.3deg) shows the best real-anatomy result of the
+  four (PARTIAL, argmax shift +2.5 of the true +5.0, correct direction)
+  — better than either patient's "smooth" point, the OPPOSITE of what
+  the synthetic phantom's convex/concave framing predicted; its smooth
+  landmark (theta=271.4deg) is ghost-dominated like patient001's.
+- **Combined conclusion across all 14 tested locations (10 synthetic +
+  4 real): 1 CLEAN (7%), 6 PARTIAL (43%), 7 GHOST-DOMINATED (50%).**
+  Genuinely clean, hallucination-free acoustic recoverability at a
+  single boundary location, under this 8-probe geometry, is the rare
+  exception rather than a predictable function of local curvature —
+  and it clearly does NOT reliably transfer from a synthetic cartoon
+  phantom to real anatomy (real anatomy's best case only half-tracked;
+  its smooth points did no better than ghost-dominated). **This corrects
+  run -74's framing**: the useful prediction is not "hallucination risk
+  is localized to convex/tip-like regions, trust concave/notch-like
+  regions" — it is "assume hallucination risk is pervasive across most
+  of the boundary at this probe density, and only trust a learned
+  model's local accuracy where an input-perturbation test like this one
+  has directly confirmed genuine sensitivity; convexity/concavity alone
+  does not predict which locations those are."
+- Physical sanity checked? by whom?: Claude — curvature landmarks
+  computed algorithmically (not hand-picked) from the real measured
+  r(theta), with circular padding to avoid wraparound edge artifacts;
+  vertex ray angles for the synthetic sweep verified analytically
+  against run -74's known tip/notch values before trusting the other 8;
+  both scripts reuse run -74's exact scoring machinery unmodified so
+  the two result sets are directly comparable to each other and to run
+  -74's original two-point result.
+- Gate passed? (Y/N): N/A — diagnostic/exploratory test informing the ML
+  direction, not a phase gate.
+- Next action: before training any learned prior on this data, treat
+  its accuracy claims as suspect by default at essentially any location
+  not specifically validated by this kind of per-location injectivity
+  probe — the earlier plan to use "notch-like = trust, tip-like =
+  distrust" as a cheap proxy is no longer supportable and should not be
+  used. A follow-on worth considering: check whether the 50% ghost-
+  domination rate improves with more probes (16, matching run -73's
+  circle-only test) on either the synthetic phantom or real anatomy —
+  not yet tested. Per standing instruction, NOT pushed to origin —
+  commit is local-only on `phase3-8probe-localmax-experiment` pending
+  explicit push request.
+

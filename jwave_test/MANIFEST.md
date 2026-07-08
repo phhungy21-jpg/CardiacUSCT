@@ -1352,3 +1352,34 @@ to any future trained model. Commit is LOCAL ONLY, not pushed.
 
 New files: `jwave_test/src/phase3_tip_notch_sensitivity_test.py`,
 `jwave_test/results/figures/phase3_tip_notch_sensitivity_test.png`.
+
+**GENERALIZED INJECTIVITY PROBE (run -75): CORRECTS run -74's tip/notch
+framing — clean acoustic recoverability is a rare exception (1/14
+tested locations), not convex/concave-predictable, and does not
+transfer to real anatomy.** Per user's objection ("that's just tested
+information in 1 patient") and follow-up ("why not both... 2 contrast
+cases"): `src/phase3_heart_all_vertices_sensitivity_test.py` extends
+run -74's method to all 10 heart-phantom vertices (same perturbation,
+same 8 probes) — only 1/10 (the notch) is genuinely CLEAN; 4/10
+GHOST-DOMINATED, 5/10 PARTIAL, including ordinary flank/lobe points
+behaving worse than the notch for no obvious geometric reason.
+`src/phase3_real_contour_sensitivity_test.py` applies the same method
+to REAL anatomy (patient001 mild vs. patient023 strong contraction,
+outer/epicardial boundary, curvature-selected sharp/smooth landmarks,
+localized angular-bump perturbation instead of a vertex move, isolated
+single-boundary phantom): 0/4 landmarks CLEAN, patient001 completely
+GHOST-DOMINATED at both its sharp AND smooth points (argmax frozen
+regardless of perturbation), patient023's SHARP point gives the best
+real-anatomy result (PARTIAL) — the opposite of what the synthetic
+convex/concave heuristic predicted. **Combined across all 14 tested
+locations: 1 CLEAN (7%), 6 PARTIAL (43%), 7 GHOST-DOMINATED (50%).**
+Corrected conclusion: assume hallucination risk is pervasive across
+most of the boundary at 8 probes, not localized to convex/tip-like
+regions — only trust a learned model's local accuracy where a
+per-location injectivity probe like this one has directly confirmed
+genuine sensitivity. Commit is LOCAL ONLY, not pushed.
+
+New files: `jwave_test/src/phase3_heart_all_vertices_sensitivity_test.py`,
+`jwave_test/src/phase3_real_contour_sensitivity_test.py`,
+`jwave_test/results/figures/phase3_heart_all_vertices_sensitivity_test.png`,
+`jwave_test/results/figures/phase3_real_contour_sensitivity_test.png`.
