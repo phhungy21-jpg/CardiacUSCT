@@ -1082,3 +1082,41 @@ New files: `jwave_test/src/phase3_8probe_calibration_45_135.py`,
 `jwave_test/src/phase3_mri_8probe_motion_cycle_test.py`,
 `jwave_test/results/figures/phase3_mri_8probe_localmax_test_patient001.png`,
 `jwave_test/results/figures/phase3_mri_8probe_motion_cycle_test_patient023.png`.
+
+**ROOT CAUSE DIAGNOSED + CONFIDENCE-METRIC FIX (runs -64/-65): phase
+3/6's failure is a "no real peak at all" problem, not an artifact-vs-
+true-peak competition — confirmed by plotting the raw score curve
+directly.** `src/phase3_diagnose_8probe_phase3_failure.py` showed the
+inner score curve at frac=0.61 is a smooth monotonic decline with NO
+bump at the true scale — the only "genuine local max" found is a
+noise-level wiggle (height 0.58 vs the curve's excluded edge-max of
+1.0), which is why `confidence=inf` was reported despite being wrong
+(zero competing peaks makes best/second-best undefined).
+
+Per user's proposed fix, added to `phase3_mri_8probe_test.py`'s
+`select_best_local_peak`: **prominence** = absolute peak height
+relative to the curve's own dynamic range (independent of whether a
+competitor exists), plus **SNR vs. homogeneous control** (real peak
+score / homogeneous score at the same candidate, reusing the
+already-captured homogeneous pairs, no extra simulation) and a
+post-hoc **temporal-consistency** outlier check (MAD-based, flags
+frames whose fit deviates from neighbor-smoothed trajectory — a
+diagnostic flag only, not a forced correction).
+
+**Validated on patient023's full cycle: prominence (0.18 vs 1.00
+everywhere else) and temporal-consistency (outlier_score 3.9/3.3, only
+frames crossing 3.0) BOTH independently and correctly flag phase 2/5
+(frac=0.61) with no false negatives.** Miscalibration found and
+reported: the printed prominence threshold (0.7) was tuned for inner
+and too strict for outer, false-flagging some genuinely good outer
+frames — conclusion: flag RELATIVE (within-cycle) outliers or use
+channel-specific thresholds, not one fixed universal cutoff. Not yet
+implemented as the final rule; raw metrics are reported regardless.
+
+This closes the SAFETY half of the diagnosis (detecting confident
+wrongness). The ACCURACY half — user's proposed scale+translation+
+low-order-deformation-mode model (replacing pure global scale) — is
+scoped as a separate, larger undertaking, not yet implemented.
+
+New files: `jwave_test/src/phase3_diagnose_8probe_phase3_failure.py`,
+`jwave_test/results/figures/phase3_diagnose_8probe_phase3_failure_patient023.png`.

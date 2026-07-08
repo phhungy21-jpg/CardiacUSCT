@@ -258,7 +258,7 @@ def select_best_local_peak(scale_grid, scores, step_tol=1.5):
         # argmax, but this should be rare for a real reflector and is
         # worth flagging if it happens.
         best_idx = int(np.argmax(scores))
-        return scale_grid[best_idx], scores[best_idx], False, 0.0  # no genuine peak -> untrustworthy, not high-confidence
+        return scale_grid[best_idx], scores[best_idx], False, 0.0, 0.0
 
     order = np.argsort(all_peak_scores)[::-1]
     best_pos = all_peak_positions[order[0]]
@@ -268,7 +268,15 @@ def select_best_local_peak(scale_grid, scores, step_tol=1.5):
     # gets confidence=inf; a peak that's only marginally ahead of another
     # real local max gets a low ratio, flagging it as borderline.
     confidence = best_score / all_peak_scores[order[1]] if len(order) > 1 else np.inf
-    return scale_grid[best_pos], best_score, True, confidence
+    # Prominence (per user diagnosis: "confidence = best/second is not
+    # enough -- a single wrong peak can produce infinite confidence if
+    # there is no second local peak"): ABSOLUTE peak height relative to
+    # the curve's own dynamic range, independent of whether a competing
+    # peak exists. A peak that barely rises above the curve's overall
+    # floor is untrustworthy even with confidence=inf.
+    score_min, score_max = scores.min(), scores.max()
+    prominence = (best_score - score_min) / (score_max - score_min + 1e-12)
+    return scale_grid[best_pos], best_score, True, confidence, prominence
 
 
 def fit_scale_curvature_weighted(pairs, ext_theta, ext_r, scale_grid, origin, img_rows_g, img_cols_g):
@@ -294,8 +302,8 @@ def fit_scale_curvature_weighted(pairs, ext_theta, ext_r, scale_grid, origin, im
             w = pair_weight_at_R(tx, rx, np.mean(d_vals))
             total += w * interp(pts).sum()
         scores[i] = total
-    best_scale, _, is_genuine_peak, confidence = select_best_local_peak(scale_grid, scores)
-    return best_scale, scores, is_genuine_peak, confidence
+    best_scale, _, is_genuine_peak, confidence, prominence = select_best_local_peak(scale_grid, scores)
+    return best_scale, scores, is_genuine_peak, confidence, prominence
 
 
 SCALE_GRID = np.arange(0.7, 1.31, 0.005)
@@ -357,13 +365,13 @@ if __name__ == "__main__":
     print("=== Simulating homogeneous reference ===")
     pairs_ref = capture_all_pairs(build_medium_homogeneous())
 
-    fitted_s_in, scores_in, in_is_peak, in_conf = fit_scale_curvature_weighted(pairs_real, ext_theta_in, ext_r_in, SCALE_GRID, lv_centroid_dom, img_rows_g, img_cols_g)
-    fitted_s_in_ref, _, in_ref_is_peak, in_ref_conf = fit_scale_curvature_weighted(pairs_ref, ext_theta_in, ext_r_in, SCALE_GRID, lv_centroid_dom, img_rows_g, img_cols_g)
+    fitted_s_in, scores_in, in_is_peak, in_conf, in_prom = fit_scale_curvature_weighted(pairs_real, ext_theta_in, ext_r_in, SCALE_GRID, lv_centroid_dom, img_rows_g, img_cols_g)
+    fitted_s_in_ref, _, in_ref_is_peak, in_ref_conf, in_ref_prom = fit_scale_curvature_weighted(pairs_ref, ext_theta_in, ext_r_in, SCALE_GRID, lv_centroid_dom, img_rows_g, img_cols_g)
 
     fitted_inner_mean_radius = fitted_s_in * ext_r_in.mean()
     scale_grid_guarded = SCALE_GRID[np.abs(SCALE_GRID * ext_r_out.mean() - fitted_inner_mean_radius) > GUARD_BAND_CELLS]
-    fitted_s_out, scores_out, out_is_peak, out_conf = fit_scale_curvature_weighted(pairs_real, ext_theta_out, ext_r_out, scale_grid_guarded, ring_centroid_dom, img_rows_g, img_cols_g)
-    fitted_s_out_ref, _, out_ref_is_peak, out_ref_conf = fit_scale_curvature_weighted(pairs_ref, ext_theta_out, ext_r_out, SCALE_GRID, ring_centroid_dom, img_rows_g, img_cols_g)
+    fitted_s_out, scores_out, out_is_peak, out_conf, out_prom = fit_scale_curvature_weighted(pairs_real, ext_theta_out, ext_r_out, scale_grid_guarded, ring_centroid_dom, img_rows_g, img_cols_g)
+    fitted_s_out_ref, _, out_ref_is_peak, out_ref_conf, out_ref_prom = fit_scale_curvature_weighted(pairs_ref, ext_theta_out, ext_r_out, SCALE_GRID, ring_centroid_dom, img_rows_g, img_cols_g)
 
     in_err_mm = abs(fitted_s_in - 1.0) * ext_r_in.mean() * dx[0] * 1e3
     out_err_mm = abs(fitted_s_out - 1.0) * ext_r_out.mean() * dx[0] * 1e3
@@ -371,9 +379,9 @@ if __name__ == "__main__":
 
     print(f"\n--- Result (8-probe test, LOCAL-MAXIMUM-ONLY selection) ---")
     print(f"  inner: fitted scale={fitted_s_in:.3f} (true=1.000), error={in_err_mm:.2f}mm, "
-          f"genuine_local_max={in_is_peak}, confidence={in_conf:.2f}")
+          f"genuine_local_max={in_is_peak}, confidence={in_conf:.2f}, prominence={in_prom:.2f}")
     print(f"  outer: fitted scale={fitted_s_out:.3f} (true=1.000), error={out_err_mm:.2f}mm, "
-          f"locked_to_inner={locked}, genuine_local_max={out_is_peak}, confidence={out_conf:.2f}")
+          f"locked_to_inner={locked}, genuine_local_max={out_is_peak}, confidence={out_conf:.2f}, prominence={out_prom:.2f}")
     print(f"  homogeneous control: inner={fitted_s_in_ref:.3f} (conf={in_ref_conf:.2f}), "
           f"outer={fitted_s_out_ref:.3f} (conf={out_ref_conf:.2f}) "
           f"-- should be LOW confidence even if a plausible-looking scale is picked")

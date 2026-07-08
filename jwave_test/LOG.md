@@ -4339,3 +4339,107 @@ forward are `jwave_test/`-specific (Phase 2 work).
   decision, following this project's standing discipline of diagnosing
   root causes rather than averaging over failures.
 
+### Run 2026-07-08-64 — Root cause of the phase 3/6 failure diagnosed: the true answer has NO local peak at all (not an artifact-vs-true-peak competition); confirms confidence metric is structurally incomplete
+- Phase: 3 (root-cause diagnosis, per user: "with everything up until now,
+  try to diagnose"). `src/phase3_diagnose_8probe_phase3_failure.py`
+  (new isolated diagnostic) reruns phase 2 (0-indexed; frac=0.61)'s
+  inner fit alone with the FULL score curve plotted (not just the final
+  number), plus the homogeneous-control curve for comparison.
+- **Finding**: the inner score curve at this phase is a smooth,
+  MONOTONIC DECLINE from scale=0.7 to 1.31 — the true scale (~0.897)
+  sits on this decline with no bump at all. The only point in the
+  ENTIRE curve that technically qualifies as a "genuine local maximum"
+  (via `find_peaks`) is a barely-there wiggle at scale=1.17, height
+  0.58 relative to the curve's own (excluded, edge-only) max of 1.0 --
+  essentially noise-level structure, not a real second reflector
+  signal. **This is a materially different failure mode than the
+  static-test failure (runs -57/-59)**: there, a genuine true-scale
+  peak existed but got out-competed by a taller artifact peak; here,
+  the true answer never had a peak to begin with, and the only
+  qualifying "peak" is background noise that happens to rise then
+  fall by a hair.
+- **Why `confidence=inf` was reported despite this being wrong**: with
+  zero competing peaks, `best/second-best` is undefined and defaults
+  to infinite -- exactly the gap the user identified: "a single wrong
+  peak can produce infinite confidence if there is no second local
+  peak." This was previously only seen on a homogeneous (pure-noise)
+  control (run -57/-61); this run confirms the SAME structural flaw
+  produces a confidently-wrong answer on REAL data, not just synthetic
+  noise -- a materially more serious finding.
+- Physical sanity checked? by whom?: Claude — direct visualization of
+  the raw score curve (not just the final fitted number) before
+  drawing conclusions, plus comparing this failure's signature against
+  the DIFFERENT static-test failure signature (runs -57/-59) rather
+  than assuming they were the same mechanism.
+- Gate passed? (Y/N): N/A — root-cause diagnosis.
+- Next action: implement the two fixes the user proposed: (1) absolute
+  peak-height/prominence relative to the curve's own dynamic range
+  (independent of whether a second peak exists), (2) temporal
+  consistency across neighboring frames in a cycle. See run -65.
+
+### Run 2026-07-08-65 — Confidence-metric fix implemented and validated: prominence + temporal-consistency BOTH independently flag the exact failing frames, no false negatives
+- Phase: 3 (confidence-metric fix, per user's two proposed additions).
+  Implemented in the isolated `phase3_mri_8probe_test.py` /
+  `phase3_mri_8probe_motion_cycle_test.py` (not the official pipeline —
+  this fix is being validated on the same experimental branch the
+  8-probe geometry lives on):
+  - **Prominence**: `select_best_local_peak` now also returns
+    `prominence = (best_peak_score - curve_min) / (curve_max - curve_min)`
+    — an ABSOLUTE measure of peak height relative to the curve's own
+    dynamic range, computed independently of whether a competing peak
+    exists (so a lone weak wiggle can no longer masquerade as a
+    confident detection the way it did in run -64).
+  - **SNR vs. homogeneous control**: for each frame, the homogeneous-
+    medium score curve is also computed at the SAME candidate positions
+    (reusing the already-captured, frame-independent homogeneous pairs
+    — no extra simulation), and `snr = real_peak_score / homogeneous_score_at_same_candidate`
+    is reported alongside prominence.
+  - **Temporal consistency**: post-hoc, after all 8 phases are fitted,
+    each frame's fitted radius is compared to the average of its two
+    temporal neighbors; a robust (MAD-based) outlier score is computed
+    and frames exceeding 3.0 are flagged — a DIAGNOSTIC flag only, NOT
+    a forced correction (per this project's standing rule against
+    shaping results toward an assumed-correct answer, `feedback_no_constant_anatomy_assumptions`).
+- **Result: both new checks independently and correctly flag the exact
+  same failing frames (phase 2/5, frac=0.61), with no false negatives**:
+  - Prominence: inner prominence=0.18 at phase 2/5 vs. **1.00 at every
+    other phase** — an order-of-magnitude gap, the cleanest signal of
+    the three.
+  - Temporal-consistency: outlier_score=3.9 (inner) and 3.3 (outer) at
+    phase 2/5, the ONLY frames crossing the 3.0 threshold — an
+    independent mechanism (compares fitted trajectory smoothness, not
+    the score curve shape at all) catching the same problem.
+  - SNR: weaker discriminator in absolute terms (all frames show
+    positive SNR, 4.7-10.0) but phase 2/5's outer SNR (4.69) is still
+    the clear minimum, roughly half of every other frame's.
+- **Miscalibration found and reported, not hidden**: the prominence
+  threshold (0.7) chosen for the printed report was tuned against the
+  INNER channel's behavior and turned out too strict for OUTER —
+  several genuinely GOOD outer frames (err=0.34-0.66mm) were
+  false-flagged as "low prominence" (0.39-0.54) because outer
+  prominence runs lower overall even when accurate. Phase 2/5's outer
+  prominence (0.01) is still obviously the outlier WITHIN this
+  patient's own cycle (next-lowest is 0.39), just not below a fixed
+  universal cutoff. **Conclusion: a fixed absolute threshold is the
+  wrong design — flagging RELATIVE outliers within a single patient's
+  own cycle (or per-channel-specific thresholds) would be more
+  correct.** Not yet implemented; the raw prominence/SNR numbers are
+  reported either way so this is a refinement of the flagging rule,
+  not a flaw in the underlying metric.
+- Physical sanity checked? by whom?: Claude — checked for false
+  negatives (does the metric miss the known failure? no) AND false
+  positives (does it wrongly flag known-good frames? yes, for the fixed
+  outer threshold specifically) before reporting this as validated,
+  rather than only checking the positive case.
+- Gate passed? (Y/N): N/A — confidence-metric fix, still isolated to
+  the experimental branch.
+- Next action: this closes the SAFETY half of the user's diagnosis (the
+  method can now flag when it's confidently wrong, on real data, not
+  just synthetic noise). The ACCURACY half — the user's separate
+  hypothesis that a global-scale-only template is the underlying
+  limitation, proposing a scale + translation + low-order deformation-
+  mode model instead — has NOT been implemented; it is a materially
+  larger undertaking (new multi-parameter optimizer, regularization
+  against overfitting per-frame noise, its own validation suite) and
+  is being scoped as a separate next step rather than rushed.
+

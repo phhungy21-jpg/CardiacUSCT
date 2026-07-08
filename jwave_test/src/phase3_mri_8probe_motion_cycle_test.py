@@ -89,6 +89,8 @@ if __name__ == "__main__":
     frame_centroids_lv, frame_centroids_ring = [], []
     accumulators = []
     in_confidences, out_confidences = [], []
+    in_prominences, out_prominences = [], []
+    in_snrs, out_snrs = [], []
 
     for i in range(N_PHASES):
         print(f"\n=== Phase {i+1}/{N_PHASES} (frac={fractions[i]:.2f}) ===")
@@ -112,10 +114,22 @@ if __name__ == "__main__":
         medium = build_medium_real_contour(label_map)
         pairs_real = capture_all_pairs(medium)
 
-        s_in, _, in_is_peak, in_conf = fit_scale_curvature_weighted(pairs_real, ext_theta_in, ext_r_in, SCALE_GRID, lv_centroid_dom, img_rows_g, img_cols_g)
+        s_in, scores_in_real, in_is_peak, in_conf, in_prom = fit_scale_curvature_weighted(pairs_real, ext_theta_in, ext_r_in, SCALE_GRID, lv_centroid_dom, img_rows_g, img_cols_g)
+        _, scores_in_ref, _, _, _ = fit_scale_curvature_weighted(pairs_ref, ext_theta_in, ext_r_in, SCALE_GRID, lv_centroid_dom, img_rows_g, img_cols_g)
+        in_peak_idx = int(np.argmin(np.abs(SCALE_GRID - s_in)))
+        in_snr = scores_in_real[in_peak_idx] / (scores_in_ref[in_peak_idx] + 1e-12)
+
         fitted_inner_mean_radius = s_in * ed_mean_r_in
         scale_grid_guarded = SCALE_GRID[np.abs(SCALE_GRID * ed_mean_r_out - fitted_inner_mean_radius) > GUARD_BAND_CELLS]
-        s_out, _, out_is_peak, out_conf = fit_scale_curvature_weighted(pairs_real, ext_theta_out, ext_r_out, scale_grid_guarded, ring_centroid_dom, img_rows_g, img_cols_g)
+        s_out, scores_out_real, out_is_peak, out_conf, out_prom = fit_scale_curvature_weighted(pairs_real, ext_theta_out, ext_r_out, scale_grid_guarded, ring_centroid_dom, img_rows_g, img_cols_g)
+        _, scores_out_ref, _, _, _ = fit_scale_curvature_weighted(pairs_ref, ext_theta_out, ext_r_out, scale_grid_guarded, ring_centroid_dom, img_rows_g, img_cols_g)
+        out_peak_idx = int(np.argmin(np.abs(scale_grid_guarded - s_out)))
+        out_snr = scores_out_real[out_peak_idx] / (scores_out_ref[out_peak_idx] + 1e-12)
+
+        in_prominences.append(in_prom)
+        out_prominences.append(out_prom)
+        in_snrs.append(in_snr)
+        out_snrs.append(out_snr)
 
         fitted_inner_scale.append(s_in)
         fitted_outer_scale.append(s_out)
@@ -143,8 +157,10 @@ if __name__ == "__main__":
 
         in_err_mm = abs(fitted_inner_r_mm[-1] - true_inner_radius_mm[i])
         out_err_mm = abs(fitted_outer_r_mm[-1] - true_outer_radius_mm[i])
-        print(f"  inner: true_r={true_inner_radius_mm[i]:.2f}mm fitted_r={fitted_inner_r_mm[-1]:.2f}mm err={in_err_mm:.2f}mm conf={in_conf:.2f}")
-        print(f"  outer: true_r={true_outer_radius_mm[i]:.2f}mm fitted_r={fitted_outer_r_mm[-1]:.2f}mm err={out_err_mm:.2f}mm conf={out_conf:.2f}")
+        print(f"  inner: true_r={true_inner_radius_mm[i]:.2f}mm fitted_r={fitted_inner_r_mm[-1]:.2f}mm err={in_err_mm:.2f}mm "
+              f"conf={in_conf:.2f} prominence={in_prom:.2f} snr={in_snr:.2f}")
+        print(f"  outer: true_r={true_outer_radius_mm[i]:.2f}mm fitted_r={fitted_outer_r_mm[-1]:.2f}mm err={out_err_mm:.2f}mm "
+              f"conf={out_conf:.2f} prominence={out_prom:.2f} snr={out_snr:.2f}")
 
     inner_errs = np.abs(np.array(fitted_inner_r_mm) - true_inner_radius_mm)
     outer_errs = np.abs(np.array(fitted_outer_r_mm) - true_outer_radius_mm)
@@ -153,6 +169,34 @@ if __name__ == "__main__":
     print(f"  outer boundary RMSE={np.sqrt(np.mean(outer_errs**2)):.4f}mm  (per-phase: {np.round(outer_errs,2).tolist()})")
     print(f"  (compare to 4-probe patched-pipeline result, run -59: inner RMSE=0.8354mm, outer RMSE=1.9053mm)")
     print(f"  (compare to naive-4-probe baseline, run -54: inner RMSE=0.8014mm, outer RMSE=2.2940mm)")
+
+    # --- Richer confidence report: prominence (absolute peak height vs.
+    # curve's own dynamic range) + SNR (real peak vs. homogeneous-control
+    # curve at that same candidate), per user diagnosis: "confidence =
+    # best/second is not enough -- a single wrong peak can produce
+    # infinite confidence if there is no second local peak."
+    print(f"\n--- Richer confidence report (prominence, SNR vs. homogeneous control) ---")
+    for i in range(N_PHASES):
+        flag_in = " <-- LOW PROMINENCE/SNR, UNTRUSTWORTHY" if (in_prominences[i] < 0.7 or in_snrs[i] < 1.3) else ""
+        flag_out = " <-- LOW PROMINENCE/SNR, UNTRUSTWORTHY" if (out_prominences[i] < 0.7 or out_snrs[i] < 1.3) else ""
+        print(f"  phase {i} (frac={fractions[i]:.2f}): inner prom={in_prominences[i]:.2f} snr={in_snrs[i]:.2f}{flag_in}")
+        print(f"  phase {i} (frac={fractions[i]:.2f}): outer prom={out_prominences[i]:.2f} snr={out_snrs[i]:.2f}{flag_out}")
+
+    # --- Temporal-consistency check: flag any frame whose fitted radius
+    # is a large outlier relative to its neighbors -- a DIAGNOSTIC flag
+    # only (not a forced correction, per this project's standing rule
+    # against shaping results toward an assumed-correct answer).
+    print(f"\n--- Temporal-consistency check (deviation from neighbor-smoothed trajectory) ---")
+    for label, seq in [("inner", fitted_inner_r_mm), ("outer", fitted_outer_r_mm)]:
+        seq = np.array(seq)
+        smoothed = np.array([np.mean([seq[(j - 1) % N_PHASES], seq[(j + 1) % N_PHASES]]) for j in range(N_PHASES)])
+        deviation = np.abs(seq - smoothed)
+        mad = np.median(np.abs(deviation - np.median(deviation))) + 1e-9
+        for i in range(N_PHASES):
+            outlier_score = deviation[i] / mad
+            flag = " <-- TEMPORAL OUTLIER" if outlier_score > 3.0 else ""
+            print(f"  {label} phase {i} (frac={fractions[i]:.2f}): fitted={seq[i]:.2f}mm, "
+                  f"neighbor-avg={smoothed[i]:.2f}mm, deviation={deviation[i]:.2f}mm, outlier_score={outlier_score:.1f}{flag}")
 
     n_cols = 4
     n_rows = int(np.ceil(N_PHASES / n_cols))
