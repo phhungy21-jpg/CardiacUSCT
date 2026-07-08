@@ -1225,3 +1225,28 @@ both untested). Commit is LOCAL ONLY, not pushed per user instruction.
 
 New files: `jwave_test/src/phase3_lv_rv_twocomponent_test.py`,
 `jwave_test/results/figures/phase3_lv_rv_twocomponent_test_patient001.png`.
+
+**LANDMARK (run -70): first GENUINE BLIND shape reconstruction test —
+no shape family assumed, only a known center.** Every prior
+"reconstruction" in this thread (circle/triangle/heart-cartoon/ring/
+real-MRI/RV) swept one scalar (radius or scale) against an
+ALREADY-KNOWN shape — the backprojection image was blind, the readout
+never was. `src/phase3_blind_shape_reconstruction_test.py` fixes this:
+per-angle (144 angles) independent radius discovery using the same
+validated curvature-weighting + local-max selection, no cross-angle
+shape assumption. Tested on the synthetic ring's inner boundary (known
+exact circle, standard 4-probe). **Result: perfect along the 4 probe
+axes (0.00-0.10mm), but severe structured corruption between probes
+(diagonal angles balloon to 96 cells vs true 60, 3.6mm error)** —
+visually confirmed locking onto the accumulator's own diagonal "ghost"
+streaks (the same adjacent-probe-pair mechanism diagnosed for the
+triangle vertex, runs -29/-31/-36). This is the first direct
+measurement of the method's genuine shape-blind angular resolution,
+and explains mechanistically why this thread pivoted to global
+template-matching in the first place. Gives a precise case for more
+probes specifically for BLIND reconstruction (stronger than the
+justification for scale-only estimation). Commit is LOCAL ONLY, not
+pushed.
+
+New files: `jwave_test/src/phase3_blind_shape_reconstruction_test.py`,
+`jwave_test/results/figures/phase3_blind_shape_reconstruction_test_ring.png`.

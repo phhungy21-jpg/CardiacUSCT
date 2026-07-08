@@ -4725,3 +4725,87 @@ forward are `jwave_test/`-specific (Phase 2 work).
   instruction, NOT pushed to origin — commit is local-only on
   `phase3-8probe-localmax-experiment` pending explicit push request.
 
+### Run 2026-07-08-70 — LANDMARK: first GENUINE BLIND shape reconstruction test (no shape family assumed) — perfect along probe axes, severe structured "ghost cone" corruption between probes
+- Phase: 3 (foundational correction, per user: "wait we didn't do blind
+  reconstruction? isn't that supposed to be the purpose for
+  backprojection all we have done so far?" then "i want that to be
+  investigated now. because the crux of this project is image
+  reconstruction using USCT"). Directly confirmed and corrected an
+  imprecision: EVERY prior "reconstruction" in this thread (circle,
+  triangle, heart-cartoon, ring, real-MRI shapes, RV) swept a single
+  scalar (radius or scale) against an ALREADY-KNOWN shape family or
+  literal true contour. The backprojection ACCUMULATOR (image) was
+  genuinely blind at the pixel level every time; the READOUT never was
+  — every number reported in this whole thread measures how accurately
+  a KNOWN shape's SIZE can be estimated from the blind image, not
+  whether an UNKNOWN shape can be discovered from it. This had never
+  been tested until this run.
+- **Design** (`src/phase3_blind_shape_reconstruction_test.py`): for
+  each of 144 angles INDEPENDENTLY, sweep a candidate radius and apply
+  the SAME validated, safety-checked machinery already used everywhere
+  else in this thread (`pair_weight_at_R` curvature weighting, run -44;
+  `select_best_local_peak` local-max-only selection, runs -57/-65) to
+  that angle's OWN score curve alone — no information shared across
+  angles, no shape family assumed. The only assumptions kept: a known
+  center (already standard throughout this thread) and star-convex
+  topology (one boundary crossing per ray). Validated on the
+  simplest, best-characterized case first: the synthetic ring
+  phantom's inner boundary (true shape = exact circle, R=60 cells
+  exactly, standard 4-probe geometry) — per this project's standing
+  discipline of testing the cheapest, most-understood case before
+  escalating to a real, truly-unknown shape.
+- **Result: a clean, structured, highly informative failure mode, not
+  random noise.** Overall RMSE=1.38mm across all 144 angles, but the
+  per-angle breakdown is sharply bimodal and DIRECTLY tied to the
+  4-probe geometry: **at angles aligned with a probe's own viewing
+  axis (0/90/180/270 degrees and near neighbors), the blind fit is
+  essentially PERFECT (0.00-0.10mm error)** — confirming the underlying
+  physics and per-angle machinery are sound wherever there is direct
+  probe coverage. **At angles BETWEEN probes (roughly the 45/135/225/
+  315-degree diagonals), the discovered radius balloons to 96 cells
+  (true=60, error=3.6mm)** — visually confirmed
+  (`results/figures/phase3_blind_shape_reconstruction_test_ring.png`)
+  to be locking directly onto the bright diagonal "X"-shaped ghost-
+  artifact streaks in the accumulator image — the SAME adjacent-probe-
+  pair ghost mechanism first diagnosed for the triangle vertex (runs
+  -29/-31/-36), now shown to directly corrupt blind per-angle shape
+  discovery in a way the global template-match approach was
+  specifically built to average away.
+- **Why this matters (the actual point of the investigation)**: this
+  is the first DIRECT measurement of this method's genuine, shape-
+  blind angular resolution. It explains, mechanistically, why this
+  entire thread pivoted to global shape-fitting in the first place
+  (runs -29 through -32) — global integration over all angles dilutes
+  these localized ghost spikes, which is why THAT approach worked so
+  well — but that pivot was a deliberate trade of blind shape recovery
+  for robust size estimation, never reversed until now. It also gives
+  a PRECISE, mechanistic (not just intuitive) case for more probes:
+  each additional probe would directly narrow the angular gap where
+  ghost-cone corruption dominates, in a way single-scale-size
+  estimation could tolerate getting away without, but genuine blind
+  shape discovery cannot.
+- Physical sanity checked? by whom?: Claude — homogeneous-medium
+  control run alongside the real case (shows uncorrelated, non-
+  periodic noise, prominence=0.83 vs real's 1.00, confirming the real
+  case's periodic structure is a genuine signal-driven artifact, not a
+  processing artifact common to both); visual confirmation that the
+  ballooned angles align with the accumulator's own visible ghost
+  streaks, not asserted from the number alone.
+- Gate passed? (Y/N): N/A — foundational capability test, not a gated
+  deliverable, but a significant correction to how every prior result
+  in this thread should be understood/framed.
+- Next action: two natural next steps, not yet done: (1) escalate this
+  SAME blind per-angle method to the real, irregular MRI shape
+  (patient001), withholding the true contour from the algorithm
+  entirely — the actual test of "can this discover an unknown real
+  boundary's shape," as opposed to the synthetic circle's known-shape
+  sanity check; (2) re-run this same blind test with 8 probes (the
+  already-built, self-consistently-calibrated experimental geometry,
+  runs -56/-60/-61) to directly quantify how much more probe angles
+  narrow the ghost-cone gaps — this thread now has a real, mechanistic
+  reason to expect a meaningfully bigger improvement for BLIND
+  reconstruction than the modest gains more probes gave the scale-only
+  method. Per user instruction, NOT pushed to origin — commit is
+  local-only on `phase3-8probe-localmax-experiment` pending explicit
+  push request.
+
