@@ -4809,3 +4809,49 @@ forward are `jwave_test/`-specific (Phase 2 work).
   local-only on `phase3-8probe-localmax-experiment` pending explicit
   push request.
 
+### Run 2026-07-08-71 — Blind reconstruction with 8 probes: mechanistic prediction directly and cleanly confirmed — RMSE 1.38mm -> 0.32mm, ghost-cone extent roughly halved and each spike much narrower/smaller
+- Phase: 3 (direct follow-on to run -70, per user: "try blind recovery
+  on 8 probe model"). `src/phase3_blind_shape_reconstruction_test_8probe.py`
+  — identical per-angle independent radius-discovery method as run -70,
+  same synthetic ring phantom (known exact circle, R=60 cells), same
+  144-angle sweep, applied to the 8-probe geometry + fully self-
+  consistent calibration (runs -56/-60/-61) instead of the standard
+  4-probe model. Direct, controlled, one-variable comparison (only
+  probe count changes).
+- **Result: the run -70 mechanistic prediction is confirmed cleanly and
+  directly.** RMSE improved from 1.3816mm (4 probes) to **0.3249mm** (8
+  probes) — a ~4.25x reduction. The number of angles with error >1.0mm
+  dropped from roughly half the circle (4-probe ghost cones were wide,
+  centered on the 4 inter-probe diagonals) to just **8/144 (~5.5%)**.
+  Visually
+  (`results/figures/phase3_blind_shape_reconstruction_test_8probe_ring.png`):
+  the discovered contour now tracks the true circle almost perfectly
+  around the ENTIRE boundary, with only small residual spikes at much
+  NARROWER angular windows (roughly midway between each of the 8
+  probes, matching the predicted mechanism exactly) and much SMALLER
+  in magnitude (peak ~71 cells vs. the 4-probe case's 96).
+  Genuine local max found at 144/144 angles (same as the 4-probe case
+  — the difference is in ACCURACY of the discovered peak, not whether
+  a peak exists at all).
+- **Why this is a stronger, more direct confirmation than the earlier
+  probe-count tests (runs -56/-63) for the scale-only method**: those
+  earlier tests showed a real but modest, sometimes-inconsistent
+  improvement from more probes (e.g. run -63's motion-cycle test was a
+  genuinely MIXED result). Here, the improvement is large, clean, and
+  directly explainable by a specific, visually-confirmed mechanism
+  (narrower/smaller ghost cones at the new, denser set of inter-probe
+  gaps) — exactly the outcome predicted in run -70's own next-action
+  note, not merely observed after the fact.
+- Physical sanity checked? by whom?: Claude — controlled one-variable
+  comparison against run -70's exact same phantom/method/angles;
+  visual confirmation that residual spikes sit where predicted (between
+  probes) and are smaller/narrower, not just a lower aggregate number.
+- Gate passed? (Y/N): N/A — landmark follow-on test, not a gated
+  deliverable.
+- Next action: escalate the SAME blind per-angle method to the real,
+  irregular MRI shape (patient001), withholding the true contour from
+  the algorithm entirely — the actual test of discovering an unknown
+  real boundary's shape, not a known-circle sanity check. Not yet done.
+  Per user instruction, NOT pushed to origin — commit is local-only on
+  `phase3-8probe-localmax-experiment` pending explicit push request.
+

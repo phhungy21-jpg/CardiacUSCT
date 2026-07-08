@@ -1250,3 +1250,16 @@ pushed.
 
 New files: `jwave_test/src/phase3_blind_shape_reconstruction_test.py`,
 `jwave_test/results/figures/phase3_blind_shape_reconstruction_test_ring.png`.
+
+**8-PROBE BLIND TEST CONFIRMS THE MECHANISM (run -71).**
+`src/phase3_blind_shape_reconstruction_test_8probe.py` — identical
+per-angle blind method as run -70, same synthetic ring, 8-probe
+geometry instead of 4. RMSE 1.3816mm -> 0.3249mm (~4.25x), ghost-
+affected angles dropped from ~half the circle to 8/144 (~5.5%),
+visually confirmed as narrower/smaller residual spikes exactly between
+the now-denser probe set. A cleaner, more directly-explained
+improvement than the earlier probe-count tests gave the scale-only
+method. Commit is LOCAL ONLY, not pushed.
+
+New files: `jwave_test/src/phase3_blind_shape_reconstruction_test_8probe.py`,
+`jwave_test/results/figures/phase3_blind_shape_reconstruction_test_8probe_ring.png`.
