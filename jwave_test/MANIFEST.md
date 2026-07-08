@@ -1285,3 +1285,40 @@ blind-discovery-specific. Commit is LOCAL ONLY, not pushed.
 
 New files: `jwave_test/src/phase3_blind_shape_reconstruction_test_8probe_heart.py`,
 `jwave_test/results/figures/phase3_blind_shape_reconstruction_test_8probe_heart.png`.
+
+**BLIND RECONSTRUCTION, 16 PROBES (run -73): circle keeps improving
+cleanly, but the irregular heart phantom gets ZERO net benefit from
+doubling probes again — decisive, non-monotonic result.** Per user:
+"try the 16 probe model (4x4), or if you have a mathematically more
+favourable observer field (a hex or circular vs square field)" —
+answered directly (uniform circular spacing minimizes max angular gap;
+grids are for tiling an area, a different problem) before building.
+New self-contained 16-probe module `src/phase3_mri_16probe_test.py`
+(22.5-degree spacing) and fresh self-consistent calibration
+`src/phase3_16probe_calibration.py` (measures all 8 new non-monostatic
+separation categories from scratch, per run -60's finding that
+calibration doesn't transfer across geometries; saved to
+`results/mri_16probe_calibration.npz`). Same per-angle blind method as
+runs -70/-71/-72 in `src/phase3_blind_shape_reconstruction_test_16probe.py`
+(parameterized: `circle` or `heart` via argv). Circle: RMSE=0.0986mm,
+0/144 angles >1mm — continues the clean scaling trend (4->8->16
+probes: 1.38->0.32->0.10mm). Heart (off-center, concave, 10-vertex):
+RMSE=1.6742mm — slightly WORSE than 8-probe's 1.544mm (run -72),
+67/144 angles >1mm (vs 74/144 — not a real improvement once RMSE is
+weighed), failure pattern shifted location rather than shrinking.
+**Conclusion, now decisive: "more probes" is a clean fix specifically
+for smooth/convex boundaries and does NOT generalize to real,
+multi-featured anatomical irregularity for blind reconstruction.**
+Next most valuable steps: (1) test whether the non-blind global
+shape-fit method also fails to improve with more probes on this same
+heart phantom, to isolate whether the limitation is physics-
+fundamental or blind-discovery-specific; (2) the real, irregular MRI
+shape (patient001) blind test, still not attempted. Commit is LOCAL
+ONLY, not pushed.
+
+New files: `jwave_test/src/phase3_mri_16probe_test.py`,
+`jwave_test/src/phase3_16probe_calibration.py`,
+`jwave_test/src/phase3_blind_shape_reconstruction_test_16probe.py`,
+`jwave_test/results/mri_16probe_calibration.npz`,
+`jwave_test/results/figures/phase3_blind_shape_reconstruction_test_16probe_circle.png`,
+`jwave_test/results/figures/phase3_blind_shape_reconstruction_test_16probe_heart.png`.

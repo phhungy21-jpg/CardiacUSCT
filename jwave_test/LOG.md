@@ -4912,3 +4912,87 @@ forward are `jwave_test/`-specific (Phase 2 work).
   commit is local-only on `phase3-8probe-localmax-experiment` pending
   explicit push request.
 
+### Run 2026-07-08-73 — 16-probe blind reconstruction: circle keeps improving cleanly (RMSE 0.32mm -> 0.10mm), but the irregular heart shape gets ZERO net benefit (non-monotonic, decisive)
+- Phase: 3 (per user: "try the 16 probe model (4x4), or if you have a
+  mathematically more favourable observer field (a hex or circular vs
+  square field)"). Answered the geometry question directly before
+  building anything: for N discrete viewpoints surrounding a target,
+  minimizing the maximum angular gap (the exact metric behind the
+  ghost-cone problem, runs -70/-72) requires UNIFORM SPACING ON A
+  CIRCLE, not a grid — square/hex grids are the right tool for tiling a
+  2D AREA efficiently (hex packing minimizes sensors to cover a plane),
+  a different problem from surrounding a point target with even
+  angular coverage. This also matches how real ring-array USCT systems
+  are built. So "16 probes" here means 16 probes at 22.5-degree
+  spacing around the SAME circle as the 4/8-probe layouts, not a 4x4
+  grid.
+- **New infrastructure** (self-contained, no existing file modified,
+  per this thread's standing discipline): `phase3_mri_16probe_test.py`
+  (probe geometry/domain/capture, verified p0's position exactly
+  matches the established 4/8-probe convention at angle 0, separations
+  verified correct — e.g. sep(p0,p8)=180deg, sep(p0,p4)=90deg);
+  `phase3_16probe_calibration.py` (self-consistent calibration —
+  per run -60's finding that calibration does NOT transfer across
+  probe geometries even for nominally-same categories, ALL 8 non-
+  monostatic separations this layout introduces — 22.5/45/67.5/90/
+  112.5/135/157.5/180 degrees — measured fresh via the same isolated
+  single-boundary myocardium-disk method as runs -44/-53/-60, at the
+  same 3 radii (41/71/88 cells); results physically sensible —
+  monotonic-ish decay of amplitude ratio with increasing separation
+  angle, consistent with the established curvature-divergence
+  mechanism); `phase3_blind_shape_reconstruction_test_16probe.py`
+  (same per-angle blind method as runs -70/-71/-72, parameterized for
+  either the synthetic ring or the off-center heart phantom).
+- **Result 1 (synthetic ring, known circle): clean, continued
+  improvement.** RMSE=0.0986mm — down from 8-probe's 0.3249mm (run -71)
+  and 4-probe's 1.3816mm (run -70), a consistent, roughly ~3x-per-
+  doubling scaling law. **Zero angles (0/144) now exceed 1.0mm error**
+  (was 8/144 at 8 probes, roughly half the circle at 4 probes).
+  Confirms the ghost-cone-narrowing mechanism continues to scale
+  cleanly and predictably for a smooth, convex boundary.
+- **Result 2 (off-center concave heart phantom): NO improvement —
+  a genuine non-monotonic result, not just "less improvement".**
+  RMSE=1.6742mm — slightly WORSE than the 8-probe result (1.5440mm,
+  run -72), despite doubling the probe count again. 67/144 angles
+  still exceed 1.0mm error (vs. 74/144 at 8 probes — a marginal
+  reduction in COUNT that does not translate to a better RMSE, since
+  the residual errors are apparently just as large where they occur).
+  Visually confirmed
+  (`results/figures/phase3_blind_shape_reconstruction_test_16probe_heart.png`):
+  the discovered contour is still chaotic and spiky in multiple
+  sectors, including new spikes not in the same pattern as the 8-probe
+  case's notch/tip asymmetry (run -72) — the specific angular
+  locations of failure shifted, not just their count.
+- **Conclusion, now decisively confirmed (not merely suggested by run
+  -72)**: "more probes" is NOT a general fix for blind shape
+  reconstruction on irregular, multi-featured real anatomy — it is a
+  clean, reliable fix SPECIFICALLY for smooth/convex boundaries (the
+  ghost-cone-between-probes mechanism), and genuinely fails to help
+  (not just "helps less") once a shape has enough of its own sharp
+  local features that ghost mechanisms multiply combinatorially with
+  probe count rather than being diluted by it. This is an important,
+  actionable finding: pursuing even more probes for real (irregular)
+  cardiac anatomy, on the strength of the circle result alone, would
+  likely NOT solve the real problem.
+- Physical sanity checked? by whom?: Claude — controlled, one-variable
+  comparison against runs -70/-71 (circle) and run -72 (heart) using
+  the exact same phantoms/angles/method; visual confirmation that the
+  heart result's failure pattern is qualitatively different (not just
+  quantitatively similar-but-worse) from the 8-probe case before
+  calling this "no benefit" rather than "diminishing returns".
+- Gate passed? (Y/N): N/A — escalation/exploratory test, but a
+  decisive, actionable finding for planning purposes.
+- Next action: the two follow-ups flagged in run -72 remain the most
+  valuable next steps: (1) test whether the already-validated, NON-
+  blind global shape-fit method (known polygon family, one scale
+  parameter) also fails to improve with more probes on this same heart
+  phantom — this would show whether the irregular-shape problem is
+  fundamental to the PHYSICS (more probes genuinely doesn't help this
+  shape at all, blind or not) or specific to blind per-angle discovery
+  only; (2) the real, irregular MRI shape (patient001) blind test,
+  still not attempted, which would show whether real anatomical
+  irregularity behaves like the synthetic heart phantom's multi-vertex
+  case or differently. Per user instruction, NOT pushed to origin —
+  commit is local-only on `phase3-8probe-localmax-experiment` pending
+  explicit push request.
+
