@@ -4662,3 +4662,66 @@ forward are `jwave_test/`-specific (Phase 2 work).
   origin — commits are local-only on `phase3-8probe-localmax-experiment`
   pending an explicit push request.
 
+### Run 2026-07-08-69 — First 2-COMPONENT (LV + RV) reconstruction test, standard 4-probe model: LV/epicardium fits UNCONTAMINATED by RV's presence, but RV's own fit undershoots noticeably
+- Phase: 3 (new class of test — every prior real-MRI test this thread,
+  runs -47 onward, deliberately EXCLUDED RV to keep a direct 2-tissue-
+  boundary analog of the synthetic ring phantoms). Per user: "try a
+  2-component run for [patient001's prep figure]. including both the lv
+  and the appendage/la on a 4-probe model." Clarified with the user
+  first (AskUserQuestion): ACDC (patient001's only available real data)
+  has NO left atrium/appendage segmentation at all (only
+  background/RV/myocardium/LV labels) — user chose RV as the real,
+  available second chamber over a synthetic appendage shape.
+- `src/phase3_lv_rv_twocomponent_test.py` (new, standard/validated
+  4-probe infrastructure, NOT the 8-probe experimental branch's
+  geometry): extracts and rescales RV (label 1) using the IDENTICAL
+  zoom_factor/smoothing formula as run -47's LV/myocardium prep
+  (confirmed to reproduce 2.531x exactly), places it in the SAME
+  domain at the SAME offset so its real anatomical position relative
+  to the LV/myocardium ring is preserved (real anatomy: RV sits
+  adjacent to the LV free wall — confirmed 0px mask overlap after
+  smoothing, and RV centroid 88.9 cells from the ring centroid).
+  Required a substantially wider search grid (256x256, +/-229 cells)
+  since RV's real position is far enough from the domain center to
+  need much more coverage than any single-chamber test so far.
+- **Result**: **LV inner: fitted scale=1.005, error=0.03mm** — matches
+  run -55's single-component (RV-excluded) baseline (0.995/0.03mm)
+  almost exactly. **Epicardium: fitted scale=1.045, error=0.33mm** —
+  close to but slightly worse than run -55's baseline (1.035/0.26mm),
+  a small difference not clearly attributable to RV contamination vs.
+  the different (wider) search grid used here. **RV (first-ever fit
+  for this structure): fitted scale=0.705, error=1.28mm** — a REAL,
+  visible undershoot (confirmed visually in
+  `results/figures/phase3_lv_rv_twocomponent_test_patient001.png`: the
+  fitted RV contour is visibly shrunken inward from the true crescent
+  shape), notably worse than every LV/myocardium fit in this thread.
+- **Interpretation, not yet further diagnosed**: the near-identical
+  LV/epicardium numbers show RV's presence does NOT meaningfully
+  contaminate the primary chamber's fit — a genuine, reassuring result
+  for this new class of test (two independent, spatially-separate
+  bodies, not two concentric boundaries, is a different risk than the
+  previously-diagnosed inner/outer "locking"). RV's own poor fit is
+  plausibly explained (not confirmed) by its genuinely different local
+  shape: RV is crescentic/elongated (wrapping around part of the LV),
+  unlike every circular/near-circular boundary the curvature-weight
+  calibration (runs -44/-53/-60) was measured against — a single
+  global scale-factor + curvature-weighted-by-radius model may not
+  represent RV's locally-varying (concave-then-convex) curvature well.
+  This is a plausible mechanism, not yet directly tested the way
+  run -44 tested the inner/outer curvature-divergence hypothesis with
+  real isolated-boundary measurements.
+- Physical sanity checked? by whom?: Claude — direct numeric comparison
+  against run -55's established baseline before drawing the "no
+  contamination" conclusion; visual confirmation of the RV undershoot
+  before reporting it, not just the raw number.
+- Gate passed? (Y/N): N/A — new escalation/exploratory test.
+- Next action: if pursued further, the natural next diagnostic is
+  testing whether RV's undershoot is (a) a curvature-calibration
+  mismatch (as hypothesized above — testable by re-measuring the
+  curvature-weight model directly on RV's own real shape, isolated,
+  the same method as run -44), or (b) a search-grid/placement artifact
+  specific to RV's off-center position (testable by re-running with an
+  even wider or re-centered grid). Neither tested this run. Per user
+  instruction, NOT pushed to origin — commit is local-only on
+  `phase3-8probe-localmax-experiment` pending explicit push request.
+

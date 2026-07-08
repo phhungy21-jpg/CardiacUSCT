@@ -1200,3 +1200,28 @@ not pushed to origin.
 
 New files: `jwave_test/src/phase3_robust_temporal_estimator.py`,
 `jwave_test/src/phase3_validate_temporal_estimator_synthetic.py`.
+
+**FIRST 2-COMPONENT (LV+RV) RECONSTRUCTION TEST (run -69), standard
+4-probe model.** Every prior real-MRI test (runs -47 onward)
+deliberately excluded RV to keep a direct 2-tissue analog of the
+synthetic ring phantoms. `src/phase3_lv_rv_twocomponent_test.py` adds
+RV back in as a spatially-separate third tissue region (ACDC has no
+LA/appendage label — confirmed and clarified with the user, who chose
+RV as the real second chamber). Same zoom_factor/smoothing/placement
+as run -47's LV prep, applied consistently to RV too (0px overlap
+confirmed after smoothing; RV centroid 88.9 cells from the ring
+centroid, matching real anatomy's RV-adjacent-to-LV-free-wall
+position). Needed a much wider search grid (256x256, +/-229 cells).
+**Result: LV inner (1.005/0.03mm) and epicardium (1.045/0.33mm) match
+run -55's RV-excluded baseline closely — RV's presence does NOT
+contaminate the primary chamber's fit.** **RV's OWN fit undershoots
+noticeably (scale=0.705, error=1.28mm)** — visually confirmed shrunken
+inward from the true crescent shape. Plausible (not yet tested)
+explanation: RV's crescentic/elongated shape has locally-varying
+(concave-then-convex) curvature unlike every circular boundary the
+curvature-weight calibration was measured against. Not yet diagnosed
+further (curvature recalibration vs. search-grid/placement artifact
+both untested). Commit is LOCAL ONLY, not pushed per user instruction.
+
+New files: `jwave_test/src/phase3_lv_rv_twocomponent_test.py`,
+`jwave_test/results/figures/phase3_lv_rv_twocomponent_test_patient001.png`.
