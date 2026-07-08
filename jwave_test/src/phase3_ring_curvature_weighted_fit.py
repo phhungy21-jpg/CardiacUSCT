@@ -46,20 +46,24 @@ MONOSTATIC = {("top", "top"), ("bottom", "bottom"), ("left", "left"), ("right", 
 ANTIPODAL = {("bottom", "top"), ("top", "bottom"), ("left", "right"), ("right", "left")}
 # everything else (8 pairs) is "cross"
 
-# Measured calibration points from run -44 (isolated single-boundary
-# amplitude ratios, baseline-category amplitude / monostatic amplitude
-# at that SAME radius):
-_CAL_R = np.array([41.0, 71.0])
-_CAL_CROSS = np.array([0.136, 0.000])
-_CAL_ANTIPODAL = np.array([0.045, 0.000])
+# Measured calibration points from run -44 (R=41, 71) plus run -52
+# (R=88, added when patient023's real epicardial boundary at this
+# radius was found to need extrapolation past R=71 -- measured rather
+# than assumed, per `phase3_ring_calibration_r88.py`: cross/mono=0.0001,
+# antipodal/mono=0.0003, essentially confirming (not correcting) the
+# already-clipped-to-zero extrapolation was physically accurate at this
+# radius -- a large/flat reflector genuinely has near-zero wide-baseline
+# signal, not a calibration-range artifact):
+_CAL_R = np.array([41.0, 71.0, 88.0])
+_CAL_CROSS = np.array([0.136, 0.000, 0.0001])
+_CAL_ANTIPODAL = np.array([0.045, 0.000, 0.0003])
 
 
 def _linear_weight(R, cal_r, cal_w):
-    """Linear interpolation between the 2 measured points, clipped to
-    [0,1] outside the measured range."""
-    slope = (cal_w[1] - cal_w[0]) / (cal_r[1] - cal_r[0])
-    w = cal_w[0] + slope * (R - cal_r[0])
-    return float(np.clip(w, 0.0, 1.0))
+    """Piecewise-linear interpolation between the measured calibration
+    points, clipped to [0,1] (via np.interp's edge-hold) outside the
+    measured range."""
+    return float(np.clip(np.interp(R, cal_r, cal_w), 0.0, 1.0))
 
 
 def pair_baseline_category(tx, rx):

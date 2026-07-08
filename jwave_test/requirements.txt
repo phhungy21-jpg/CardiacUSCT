@@ -6,6 +6,7 @@
 numpy==1.24.3
 scipy==1.11.1
 matplotlib==3.7.2
+scikit-image==0.26.0  # added for MRI-derived irregular-boundary contour extraction, LOG.md run -47
 jwave==0.2.1
 jax==0.4.38
 jaxlib==0.4.38

@@ -3334,3 +3334,702 @@ forward are `jwave_test/`-specific (Phase 2 work).
   joint center+radius fitting problem instead of assuming known
   centers; (3) add more calibration radii to the weight model.
 
+### Run 2026-07-08-47 — Data prep: real MRI-derived irregular ring, rescaled + smoothed (escalation from synthetic eccentric ring)
+- Phase: 3 (data preparation for the next escalation). Per user:
+  "next phase is stress-test on MRI-derived reconstructed hearts...
+  maybe reconstruct the irregular ring from one of the mri, a sound
+  escalation from smooth eccentric off-center rings" then "stick with
+  1 [patient/slice] first... apply smoothing, mimicking true
+  tissue-like irregularities."
+- Seed / config / grid / timestep: no RNG (deterministic
+  extraction/rescaling). `src/phase3_mri_irregular_ring_prep.py`. Real
+  anatomy source: ACDC `patient001` ED-frame segmentation
+  (`pilot/data/processed/ACDC/patient001.npz`, native spacing
+  1.5625mm/px, volume shape (10,128,128)). Slice selection: picked the
+  slice with maximum LV cavity pixel count across the 10-slice volume
+  (slice 4, LV area=1765px) to avoid basal/apical slices where the ring
+  is incomplete. Myocardium (label 2) + LV cavity (label 3) isolated;
+  RV (label 1) deliberately excluded to keep this a direct 2-tissue-
+  boundary analog of the already-validated ring tests (runs -39
+  through -46), not a 3-chamber model.
+- Rescaling: combined native-pixel-to-acoustic-grid AND toy-scale zoom
+  into one **nearest-neighbor** (`scipy.ndimage.zoom(..., order=0)`)
+  resample, per CLAUDE.md's explicit mask-resampling rule — real LV
+  area (4309.1mm^2, equivalent radius 37.04mm) rescaled isotropically
+  (shape preserved exactly, no distortion) to match this thread's
+  established toy scale (target LV radius 60 cells / 6mm, matching
+  `phase3_config.LV_RADIUS_ED_CELLS`). Zoom factor=2.531x. Achieved LV
+  radius after rescale: 60.2 cells (target 60.0, error 0.2 cells) —
+  deliberate choice, not incidental: simulating at real anatomical
+  scale was already shown infeasible on this CPU (run -09), and a
+  different physical scale would invalidate run -44's curvature-
+  weighting calibration (measured at toy-scale radii 41/71 cells).
+- **Smoothing (added per explicit user request)**: the raw nearest-
+  neighbor-upsampled mask has native-pixel staircasing (1.5625mm/px
+  native res, only ~2.5x zoom) that is finer than real tissue texture
+  but coarser than acoustically-meaningless single-cell noise — left
+  untreated, this would partly test the reconstruction method against
+  a sampling-grid artifact rather than genuine anatomical curvature.
+  Applied Gaussian smoothing (sigma = zoom_factor/2 = 1.27 cells, tied
+  to the native pixel size in upsampled-grid units) to the float mask
+  post-zoom, re-thresholded at 0.5 — same precedent as run -11's
+  `PROXY_AUDIT.md` staircasing check. This is a POST-PROCESS step after
+  nearest-neighbor resampling (which still happens via `order=0` zoom),
+  not a replacement of the CLAUDE.md mask-resampling rule. Both raw and
+  smoothed masks/contours saved (`results/mri_irregular_ring_patient001_slice4.npz`)
+  for comparison; smoothed version is what feeds the acoustic build.
+- Result: outer contour 599 points, inner contour 473 points (smoothed).
+  Achieved LV radius after rescale+smoothing: 60.2 cells (unchanged from
+  pre-smoothing, confirming smoothing didn't shift the overall size).
+  Figure (`results/figures/phase3_mri_irregular_ring_prep.png`, 3-panel:
+  native slice / raw rescale / smoothed rescale) confirms visually: raw
+  panel shows clear nearest-neighbor staircasing, smoothed panel removes
+  it while preserving genuine non-circular irregularity (asymmetric wall
+  thickness, mild flattening on parts of the outer boundary — visibly
+  NOT a perfect circle, though this particular patient/slice is a
+  relatively mild/typical case, not a dramatically pathological one —
+  flagged honestly to the user, who chose to proceed with it as the
+  first test rather than searching for a more extreme HCM/DCM case).
+- Physical sanity checked? by whom?: user + Claude, visual (3-panel
+  figure) — this is data-prep infrastructure, not a new physics claim.
+- Gate passed? (Y/N): N/A — data-prep step, not a gated deliverable.
+- Observations / surprises: none unexpected; `scikit-image==0.26.0`
+  added to `jwave_test/requirements.txt` for contour extraction
+  (`skimage.measure.find_contours`), newly installed this run.
+- Next action: build the acoustic medium directly from the smoothed
+  real contour/masks and run the validated multistatic backprojection +
+  curvature-weighted shape-fit (run -46's method), generalized to sweep
+  a SCALE FACTOR against the real measured (non-parametric) boundary
+  shape instead of a closed-form circle/polygon family — see run -48.
+
+### Run 2026-07-08-48 — Real MRI-derived irregular ring: acoustic reconstruction PASSES (first real-anatomy escalation)
+- Phase: 3 (escalation test, single static frame — not yet a multi-
+  frame motion cycle, deliberately: the question here is "does the
+  method survive a real, non-parametric irregular boundary shape at
+  all, or where does it break", not yet full-motion stress testing).
+- Seed / config / grid / timestep: no RNG. `src/phase3_mri_irregular_ring_reconstruction.py`.
+  Same domain/probes/tissue properties as every other ring test this
+  thread (N=(300,300), dx=0.1mm, 4-probe/16-pair geometry, cited
+  blood/myocardium/chest-wall-proxy values). Medium built DIRECTLY from
+  the smoothed real binary masks (run -47's output), not a synthetic
+  formula — real ring centroid translated to the domain center (150,150)
+  via integer offset so it sits within the existing validated
+  probe/search-grid geometry.
+- Readout generalization: since a real contour isn't a circle or a
+  known polygon family, each boundary (inner LV, outer epicardium) is
+  represented by its own measured r(theta) function (polar-resampled
+  from the extracted contour points, relative to that boundary's OWN
+  centroid — same "each boundary uses its own true center" convention
+  as run -46's eccentric test). The one free parameter swept is a SCALE
+  FACTOR s applied uniformly to r(theta) — same "known shape family,
+  global template-match" principle validated on every shape this
+  thread (circle/triangle/heart-cartoon/ring), just with a measured
+  r(theta) instead of a closed-form formula. Curvature-weighted +
+  guard-band fit reused exactly as validated in runs -45/-46
+  (`pair_weight_at_R`, `GUARD_BAND_CELLS`).
+- **Bug caught and fixed before trusting the result**: first attempt
+  put the outer guard band in SCALE units (excluding candidate scales
+  within 0.10 of the fitted inner boundary's SCALE), which is not the
+  same physical quantity as run -45/46's original guard band (physical
+  RADIUS cells) since the inner (mean radius 60.3 cells) and outer
+  (mean radius 74.0 cells) boundaries have different scale-to-radius
+  mappings. Result: outer fit collapsed to scale=0.805 (physical mean
+  radius ~59.6 cells — essentially the INNER boundary's radius),
+  "locked to inner"=True, err=1.44mm — caught by checking against the
+  independently-known true radii, not by inspection. Fixed by
+  converting the guard band back to physical-radius-cells units
+  (exclude candidate outer scales whose implied mean radius is within
+  8 cells of the fitted inner boundary's mean radius), matching
+  run -45/46's original approach exactly.
+- Result (after fix): **inner (LV) fitted scale=1.015 (true=1.000),
+  mean-radius error=0.09mm. Outer (epicardium) fitted scale=1.030
+  (true=1.000), mean-radius error=0.22mm. "Outer locked to inner"=False.**
+  Both score(s) curves show a single, sharp, unambiguous peak at the
+  true scale (figure: `results/figures/phase3_mri_irregular_ring_reconstruction.png`).
+  The fitted contours (scaled real r(theta), not an idealized circle)
+  visually track the true irregular boundary's actual bumps/flattening
+  in the reconstruction panel, not a smoothed approximation of it.
+  Homogeneous-medium control: both fits pin to the scale-grid's lower
+  edge (0.700, meaningless/no real peak), confirming the real result
+  isn't an artifact of the fitting procedure itself.
+- Physical sanity checked? by whom?: user + Claude — quantitative
+  (known real segmented shape as ground truth, RMSE-equivalent scale
+  errors converted to mm), plus the guard-band bug was caught by
+  comparing against the independently-known true radii before trusting
+  the first (wrong) result — same discipline used throughout this
+  project. Not collaborator-reviewed (Gate 2 already passed on the
+  underlying physics/tissue model, run -12; this is a new geometry, not
+  new physics).
+- Gate passed? (Y/N): N/A — escalation/validation test, not a formal
+  protocol gate.
+- Observations / surprises: the method's first real-anatomy escalation
+  passes cleanly (sub-mm on both boundaries), with the SAME validated
+  curvature-weighted + guard-band method used for the synthetic
+  eccentric ring, no new tuning — genuine evidence the approach isn't
+  overfit to synthetic circular geometry. The one real bug this run
+  (guard band unit mismatch) is a reminder that "port a fix from a
+  circle-radius space to a scale-factor space" is not a purely
+  mechanical substitution — the physical quantity the guard band is
+  meant to protect (radius overlap) must be re-derived in the new
+  parameterization, not assumed to carry over by analogy.
+- Next action: this patient/slice was flagged (run -47) as a
+  relatively mild/typical irregularity case, not a dramatic one — a
+  natural follow-on is testing a more asymmetric ACDC patient (HCM/DCM
+  cohort) for a sharper stress test. Also still open: this is a single
+  static frame, not a motion cycle — extending to multi-frame real
+  motion (e.g. ACDC ED/ES interpolation, or XCAT) remains a separate,
+  not-yet-attempted escalation, as discussed with the user before this
+  run.
+
+### Run 2026-07-08-49 — Data prep: real registration-derived 8-phase motion cycle (interpolated ED->ES->ED, not a raw-slice stack)
+- Phase: 3 (data preparation). User first proposed "take 8 consecutive
+  MRI slices" to reconstruct the cardiac cycle — corrected before
+  implementing: consecutive SLICES are different anatomical LEVELS
+  (base->apex) at one instant, not motion over time, and would be the
+  wrong axis entirely. ACDC ground-truth segmentation only exists at 2
+  real timepoints (ED, ES) per patient (established Phase I floor) — so
+  a real 8-phase cycle must INTERPOLATE between those two real
+  contours, not sample 8 additional real segmented timepoints (they
+  don't exist). Agreed approach: apply the Phase I registration-derived
+  ED->ES displacement field (`pilot/data/processed/ACDC_reg/patient001.npz`)
+  at fractional strength across 8 equally-spaced phase samples (same
+  half-cosine ED->ES->ED schedule shape as the synthetic toy,
+  `phase3_config.lv_radius_at_phase`, applied here to real displacement
+  instead of a synthetic radius). User separately confirmed "8 equally
+  distanced frames in a sequence" (not 8 raw consecutive cine frames)
+  matches this design.
+- Seed / config / grid / timestep: no RNG. `src/phase3_mri_motion_cycle_prep.py`.
+  Displacement field: `pilot/src/registration.py`'s convention verified
+  (not assumed) before use — field is defined on the ES grid, in mm,
+  order (dz,dy,dx); D(p) = ED_location - ES_location, so
+  warped_ED(p) = ED_mask(p + D(p)). Applied at fraction f via
+  `scipy.ndimage.map_coordinates(..., order=0)` (nearest-neighbor,
+  mask-safe). **Self-consistency check performed before trusting this**
+  (standing project discipline): this script's own f=1.0 warp compared
+  directly against the already Dice-validated `warped_ed_mask` saved in
+  the same npz — 98.7% pixel agreement, confirming the sign/convention
+  was correctly derived.
+- Acoustic properties + sources: n/a (data prep only, no simulation
+  this run). Same fixed rescale zoom_factor (2.531x) and Gaussian
+  smoothing (sigma=1.27 cells) as run -47, computed ONCE from the ED
+  frame and reused for all 8 phases (so every phase shares the same
+  physical scale, and the fixed ED r(theta) template used by the
+  reconstruction fit — run -50 — stays valid across the cycle).
+- Result: **registration quality flagged honestly**: patient001's
+  mean_dice=0.784 (myocardium dice=0.789), BELOW the pilot's own
+  pre-registered 0.80 Gate-3 threshold — myo_dice specifically fails
+  the threshold, though LV dice=0.926 and surface distances (0.20mm LV,
+  0.53mm myo) are reasonable. In-plane displacement at this slice is
+  small (mean 1.58mm, max 7.47mm); through-plane dz (mean 0.95mm) is
+  NOT modeled (2D phantom) — flagged as a real, not-yet-addressed
+  limitation. **Genuine contraction signal at this patient/slice is
+  subtle**: true inner mean-radius only varies 5.94-6.03mm across the
+  full cycle (span=0.10mm) — far smaller than the synthetic toy's
+  deliberate 6mm->4mm (33%) contraction. Filmstrip
+  (`results/figures/phase3_mri_motion_cycle_prep_filmstrip.png`)
+  confirms visually: shape stays close to round overall but shows real,
+  non-uniform local boundary changes (small bumps shifting position
+  frame to frame) — genuine non-uniform deformation, not just uniform
+  scaling.
+- **Bug caught and fixed before trusting the radius numbers**: first
+  attempt computed "mean radius" from ALL FILLED INTERIOR PIXELS
+  relative to centroid (np.where on the whole mask), which for a filled
+  disk averages to ~(2/3)R, not R — gave nonsensical ~4mm/4.9mm values
+  inconsistent with run -47's own 6mm/7.4mm. Fixed by computing mean
+  radius from the CONTOUR (boundary) points only, matching run -47/48's
+  convention exactly; corrected values (6.03mm/7.40mm at ED) now match
+  run -47 exactly, as they must (same ED frame).
+- Physical sanity checked? by whom?: Claude — quantitative
+  self-consistency check (98.7% agreement vs. Phase I's own
+  Dice-validated result) before proceeding; user has not yet reviewed
+  the filmstrip.
+- Gate passed? (Y/N): N/A — data-prep step.
+- Observations / surprises: this patient/slice's real contraction is
+  much weaker than the toy's deliberately dramatic 33% — a genuinely
+  different (much lower-SNR) regime than every previous test in this
+  thread, flagged before running the (expensive) acoustic simulation
+  rather than after.
+- Next action: run the validated multistatic backprojection +
+  curvature-weighted scale-fit (run -46/-48's method) against the FIXED
+  ED r(theta) template at each of the 8 phases, to test whether a
+  single scale parameter can track this real, non-uniform, low-
+  amplitude motion — see run -50.
+
+### Run 2026-07-08-50 — Real 8-phase motion cycle: acoustic reconstruction — sub-mm accuracy, well within the registration floor, but the true signal itself is smaller than the reconstruction's own error
+- Phase: 3 (escalation test). First test in this thread where ground
+  truth is imperfect real motion (Phase I registration output,
+  `labels.GT_FLOOR_CAPTION` applied throughout), not an exactly
+  prescribed toy/real-shape value.
+- Seed / config / grid / timestep: no RNG. `src/phase3_mri_motion_cycle_reconstruction.py`.
+  Same domain/probes/tissue properties as every ring test this thread.
+  Medium rebuilt fresh per phase (frozen-scene convention) from run
+  -49's smoothed real masks. Scale-factor fit is against the FIXED ED
+  r(theta) template (run -47/-48's shape, unchanged across phases) —
+  deliberately NOT re-derived per frame, so the test is "does a single
+  scale parameter track real non-uniform motion," not a tautological
+  per-frame reshape-fit. Each frame's own (currently-true) centroid
+  used as that frame's ray-sweep origin (established "own known center"
+  convention, runs -46/-48).
+- Result: **inner boundary RMSE=0.2255mm, outer boundary RMSE=0.4298mm**
+  across all 8 real-motion phases (per-phase errors 0.03-0.76mm) — both
+  comfortably within the registration floor (median ~1 voxel/1.5mm).
+  Fitted contours visually track the true non-uniform deformation
+  closely in all 8 frames
+  (`results/figures/phase3_mri_motion_cycle_reconstruction.png`),
+  including the worst frame (frac=0.61, outer err=0.76mm, where a
+  visible real local flattening the fixed-template pure-scale fit
+  can't fully capture is directly visible). **Important honest
+  caveat**: the true inner-radius range across this whole cycle is only
+  5.94-6.03mm (span=0.10mm, run -49) — SMALLER than the reconstruction's
+  own RMSE. This means this specific patient/slice's real contraction
+  signal is too subtle to be a meaningful test of "does this method
+  track real contraction" — the result demonstrates the method doesn't
+  blow up or collapse under genuine non-uniform real deformation
+  (a real, useful finding), but does NOT demonstrate accurate tracking
+  of a clear contraction signal the way the synthetic toy's 33%
+  contraction did.
+- Physical sanity checked? by whom?: user + Claude — quantitative
+  (known real registration-derived radii as ground truth) + visual
+  (filmstrip, fitted vs. true contour). Not collaborator-reviewed (Gate
+  2 already passed on physics, run -12; new geometry/motion source, not
+  new physics).
+- Gate passed? (Y/N): N/A — escalation/validation test.
+- Observations / surprises: the method survives its first exposure to
+  real, non-uniform, low-amplitude motion without collapsing — a
+  genuinely different stress test than every synthetic-toy frame tried
+  so far (which all had large, clean, prescribed contraction). The
+  finding that the true signal here is smaller than the reconstruction
+  error is itself informative, not a failure to hide: it means THIS
+  patient/slice is a weak test of contraction-tracking specifically,
+  independent of whether the method itself is accurate.
+- Next action: a patient with a genuinely larger true contraction
+  (e.g., searching ACDC for a higher-ejection-fraction-change or
+  hyperdynamic case, not just a more irregular SHAPE) would be a
+  sharper test of whether the method tracks real motion accurately,
+  as opposed to just surviving it. Also still open, as before: a more
+  dramatically asymmetric (HCM/DCM) patient for boundary SHAPE
+  irregularity, and independently registering ED to real intermediate
+  cine frames (not just fractionally interpolating the single ED->ES
+  field) as a higher-fidelity alternative to the half-cosine schedule
+  used here.
+
+### Run 2026-07-08-51 — Cohort scan for a patient with adequate real contraction; patient023 selected; static real-shape reconstruction reveals a new outer-boundary limitation
+- Phase: 3 (patient selection + escalation test). Per user: "find another
+  pt that have adequate cardiac contraction" — patient001 (runs -47/-50)
+  turned out to have only ~10% LV radius contraction, one of the weaker
+  cases in the whole cohort, too subtle a signal to demonstrate accurate
+  contraction-tracking.
+- Result: scanned all 150 ACDC patients (`ed_mask`/`es_mask` LV area
+  ratio at each patient's own max-LV-area slice, cross-referenced
+  against `ACDC_reg` registration Dice). **patient023 selected**: ED
+  radius 20.97mm -> ES radius 11.53mm (~45% contraction, vs patient001's
+  ~10%), myocardium registration Dice=0.870 (above the pilot's own 0.80
+  Gate-3 threshold, unlike patient001's 0.789), mean Dice=0.780, training
+  split, and its own max-LV-area slice is also index 4 — same slice
+  convention as patient001, no pipeline changes needed beyond the
+  patient ID. (143/150 patients had valid ED/ES area + registration
+  data; the rest were skipped for zero LV area at their candidate
+  slice.) Scripts generalized to take a `PATIENT_ID` argument
+  (`phase3_mri_irregular_ring_prep.py`, `_reconstruction.py`) rather
+  than being duplicated per patient.
+- Ran the static real-shape prep+reconstruction (run -47/-48's method)
+  on patient023: prep succeeded cleanly (zoom_factor=4.470x, achieved LV
+  radius 60.1 cells vs target 60.0). **Reconstruction revealed a NEW
+  finding**: inner (LV) fitted scale=0.925, error=0.45mm — solid, only
+  modestly worse than patient001's 0.09mm. **Outer (epicardium) fitted
+  scale=0.725, error=2.43mm** — much worse than patient001's 0.22mm, and
+  the score curve is multi-peaked/noisy rather than one dominant peak
+  (visible in `results/figures/phase3_mri_irregular_ring_reconstruction_patient023.png`).
+  Root cause traced (not assumed): patient023's real anatomy has a
+  proportionally much thicker myocardial wall than patient001's — outer
+  mean radius 88.2 cells vs patient001's 74.0 cells, for the SAME 60-cell
+  toy-rescaled LV radius. This also required widening the search grid
+  (default +/-90 cells clipped this patient's outer boundary at up to
+  ~130 cells at the search's own scale-factor extremes) — added
+  `build_search_grid()` to `phase3_mri_irregular_ring_reconstruction.py`,
+  sized dynamically per-patient rather than hardcoded, confirmed
+  patient001's result is unchanged by this addition (only activates when
+  actually needed).
+- Physical sanity checked? by whom?: Claude — quantitative (known real
+  contour as ground truth); user reviewed the figure and asked the
+  right diagnostic question before accepting either "recalibrate" or
+  "log and move on" (see run -52/-53).
+- Gate passed? (Y/N): N/A — escalation/validation test.
+- Next action: diagnose whether the noisy outer fit is a probe-standoff
+  artifact (user's hypothesis: "if the heart is too big, why don't
+  expand the grid?") or the curvature-weight calibration's radius range
+  (run -44 only measured R=41/71; this patient's outer sits at 88,
+  beyond that range) — test directly rather than assume either. See
+  run -52.
+
+### Run 2026-07-08-52 — Wide-probe-standoff diagnostic: RULED OUT as the cause (identical result at 2x the standoff)
+- Phase: 3 (diagnostic, testing user's hypothesis directly rather than
+  assuming). `src/phase3_mri_wide_probe_standoff_test.py` — a SEPARATE,
+  self-contained script (does not modify the shared
+  `phase3_backprojection_shape_fit_triangle` module every other script
+  in this thread depends on, to avoid silently changing any
+  already-validated result) with PROBE_DIST_CELLS=180 (vs. the standard
+  120) and a correspondingly larger domain (N=(460,460),
+  center=(230,230)) — giving patient023's outer boundary (88.2 cells) a
+  standoff of ~92 cells, roughly DOUBLE patient001's ~46-cell standoff
+  at the standard geometry (patient023's own standard-geometry standoff
+  was only ~32 cells).
+- Key physical rationale for why this is a fair, falsifiable test:
+  `pair_weight_at_R` (the curvature-aware weight) is a function of the
+  reflector's OWN radius only, not of probe distance — if it's truly a
+  far-field curvature/divergence effect (run -44), moving the probes
+  farther away should not change the result at all. If it's instead a
+  near-field/standoff artifact (multipath, direct-arrival window
+  overlap, PML proximity), widening the standoff should visibly improve
+  the fit.
+- Result: **identical to the standard-geometry result, to 3 decimal
+  places** — inner fitted scale=0.925 (err=0.45mm), outer fitted
+  scale=0.725 (err=2.43mm), locked_to_inner=False, both exactly matching
+  run -51's standard-probe-distance numbers. The outer score curve
+  (`results/figures/phase3_mri_wide_probe_standoff_test_patient023.png`)
+  is also visually near-identical: no clear peak at true scale=1.0,
+  same weak local bump near 0.94-1.0, same dominant feature at the
+  guard-band edge. **This cleanly rules out probe standoff as the
+  cause** — confirms the limitation is the curvature-weight
+  calibration's radius RANGE (only measured at R=41/71), not geometry,
+  per the user's own fair hypothesis being tested rather than assumed.
+- Physical sanity checked? by whom?: Claude — direct empirical test
+  (identical numeric result under a substantially different geometry is
+  itself the falsification test, not a side observation).
+- Gate passed? (Y/N): N/A — diagnostic test.
+- Next action: measure the curvature-weight calibration directly at
+  R=88 (patient023's real outer radius) rather than continuing to
+  extrapolate/assume, per user: "log and calibrate and log". See run
+  -53.
+
+### Run 2026-07-08-53 — R=88 calibration measurement: CONFIRMS (does not correct) the existing extrapolation — outer-boundary limitation is a genuine structural property of large/flat reflectors, not a calibration-range bug
+- Phase: 3 (calibration extension + re-test). `src/phase3_ring_calibration_r88.py`
+  — exact same method as run -44's original R=41/71 calibration
+  (isolated myocardium disk, no competing boundary, standard probe
+  geometry — already shown standoff-invariant by run -52), measuring
+  the real cross/monostatic and antipodal/monostatic amplitude ratios
+  at R=88 directly rather than continuing to rely on the linear model's
+  extrapolation past its calibrated range.
+- Result: **cross/mono ratio=0.0001, antipodal/mono ratio=0.0003 at
+  R=88** — both still essentially zero, consistent with (not
+  correcting) the model's already-clipped-to-zero extrapolated
+  prediction in that region. Verified the OLD linear-extrapolation
+  model's predicted value at R=88 was already ~0 after clipping (slope
+  from R=41->71 projected to a negative raw value at R=88, clipped to
+  0) — so the new measurement confirms the existing behavior was
+  accidentally already physically correct here, not a range-extrapolation
+  artifact needing correction.
+- Updated `phase3_ring_curvature_weighted_fit.py`'s `_CAL_R`/`_CAL_CROSS`/
+  `_CAL_ANTIPODAL` to 3 measured points (41, 71, 88) and switched
+  `_linear_weight` from a hand-rolled slope-extrapolation formula to
+  `np.interp` (piecewise-linear between measured points, flat-held
+  outside the measured range) — a real, if minor, behavior change for
+  candidate R BELOW 41 cells (previously extrapolated via the 41-71
+  slope, e.g. ~0.15-0.21 at R=25; now flat-held at the R=41 value,
+  0.136) — flagged since this technically differs from what runs
+  -45 through -50 used, though no already-logged result's SELECTED best-R
+  was ever in that sub-41 region, so no prior reported number is
+  believed to change in practice; not exhaustively re-verified across
+  every prior run.
+- **Re-ran patient023's static reconstruction with the updated 3-point
+  calibration: result IDENTICAL to run -51** (inner scale=0.925/0.45mm,
+  outer scale=0.725/2.43mm) — confirms recalibration does NOT fix this
+  patient's outer-boundary accuracy, exactly as predicted once the
+  measurement showed the weight was already correctly ~0 there.
+- **Conclusion (the actual finding of this 3-run diagnostic arc)**:
+  patient023's noisy outer-boundary fit is a genuine STRUCTURAL
+  limitation, not a calibration bug or a standoff artifact — a
+  reflecting boundary this large/flat (R=88 cells here) really does
+  return near-zero energy to all but the 4 monostatic pairs (run -44's
+  mechanism, now confirmed rather than assumed at this larger radius),
+  so the reconstruction has only 4 independent votes instead of 16,
+  inherently less redundant/noisier. Fixing this for real would need a
+  structurally different approach (e.g. more independent probe
+  angles/monostatic directions), not a coefficient tweak — flagged as a
+  real, not-yet-attempted follow-on rather than something to force a
+  fix for now.
+- Physical sanity checked? by whom?: Claude — quantitative (measured
+  amplitude ratios, cross-checked against the old model's own predicted
+  value at R=88 before claiming they agree) + re-run confirmation
+  (identical numeric result, not just theoretical expectation).
+- Gate passed? (Y/N): N/A — calibration/diagnostic extension.
+- Next action: per user's original request, proceed to the real
+  motion-cycle test for patient023 (runs -49/-50's method), reporting
+  the inner boundary's tracking accuracy as the primary result and the
+  outer boundary's reduced accuracy as an honestly-flagged, now
+  well-understood limitation for this patient's proportions.
+
+### Run 2026-07-08-54 — Real 8-phase motion cycle for patient023: inner boundary tracks a genuine (not noise-floor) contraction signal; outer boundary shows the run -51/-53-diagnosed structural bias, consistently
+- Phase: 3 (escalation test, patient023 variant of runs -49/-50).
+  `phase3_mri_motion_cycle_prep.py`/`_reconstruction.py` generalized to
+  take a `PATIENT_ID` CLI arg (same pattern as the static-shape
+  scripts, run -51); slice selection also generalized to the
+  max-LV-area convention rather than a hardcoded index (patient023's
+  own max-LV-area slice is again index 4, confirmed not assumed).
+- Result: registration quality for patient023: mean_dice=0.780,
+  myo_dice=0.870 (good), lv_dice=0.679 (notably lower than patient001's
+  0.926 — the LV boundary itself is registered less precisely for this
+  patient, a real caveat). Displacement-convention cross-check passed
+  (99.1% agreement vs. Phase I's own Dice-validated warp). True
+  contraction signal is now genuinely meaningful: inner mean-radius
+  spans 6.02mm -> 4.93mm (span=1.09mm) across the cycle — 11x larger
+  than patient001's 0.10mm span, addressing exactly the weak-signal gap
+  run -50 flagged.
+  - **Inner (LV) boundary: RMSE=0.8014mm** (per-phase 0.13-1.13mm) —
+    noisier than patient001's 0.23mm, but CRUCIALLY smaller than the
+    1.09mm true signal span, so this is the first real-motion test in
+    this thread that demonstrates actual contraction-TRACKING (not just
+    survival of non-uniform motion without collapse, run -50's honest
+    caveat). Both within the ~1.5-4.5mm registration floor.
+  - **Outer (epicardium) boundary: RMSE=2.2940mm** (per-phase
+    1.97-2.49mm) — consistent with, and only slightly better than, the
+    static single-frame result (2.43mm, run -51) and REMARKABLY STABLE
+    across all 8 phases (narrow 1.97-2.49mm range) rather than varying
+    with contraction phase. This stability is itself confirmatory
+    evidence for the run -51/-52/-53 diagnosis: a structural,
+    geometry-dependent bias (large/flat reflector, near-monostatic-only
+    signal) should be roughly constant regardless of the true radius at
+    each phase, unlike a signal-strength-dependent error which would
+    vary with contraction. Visually confirmed in
+    `results/figures/phase3_mri_motion_cycle_reconstruction_patient023.png`:
+    the fitted (green) outer contour sits consistently and visibly
+    inside the true (cyan) outer contour at every phase, a systematic
+    inward bias, not random noise.
+- Physical sanity checked? by whom?: Claude — quantitative (known real
+  registration-derived radii) + visual (8-frame filmstrip) + consistency
+  check (outer error's phase-independence itself corroborates the
+  already-diagnosed structural cause rather than contradicting it).
+- Gate passed? (Y/N): N/A — escalation/validation test.
+- Observations / surprises: choosing a patient for a stronger
+  contraction SIGNAL (per user's own request) incidentally also
+  surfaced a patient with a proportionally thicker WALL, which triggered
+  a structural limitation invisible in patient001's thinner-walled
+  anatomy — the two properties (contraction magnitude, wall
+  thickness/outer radius) are independent patient characteristics, and
+  a stress-test cohort should expect to encounter both kinds of
+  variation separately, not assume a single "harder" patient captures
+  every dimension of difficulty at once.
+- Next action: both the smooth-eccentric-ring synthetic escalation and
+  the two real-MRI escalations (shape-only, patient001; shape+motion,
+  patient001 and patient023) are now complete for this thread. Open,
+  not-yet-attempted follow-ons carried forward: (1) a structurally
+  different fix for large/flat outer boundaries (more independent probe
+  angles, not a coefficient tweak); (2) a more dramatically asymmetric
+  (HCM/DCM) patient for boundary SHAPE irregularity specifically
+  (distinct from contraction magnitude or wall thickness); (3)
+  independently registering ED to real intermediate cine frames instead
+  of fractionally interpolating the single ED->ES field; (4) the
+  multi-compartment/multi-chamber full-heart escalation, explicitly
+  deferred earlier in this thread pending closure of the single-ring
+  work.
+
+### Run 2026-07-08-55 — CORRECTION to runs -48/-50 (patient001): search-grid widening (not the calibration) silently changed the previously-logged numbers; isolated and confirmed via direct A/B test
+- Phase: 3 (correction/erratum). Per user: "calibration still broke
+  somehow. diagnose" — after seeing patient001 numbers shift, prompted
+  direct diagnosis rather than assuming which change caused it.
+- **Diagnosis method**: re-ran patient001's static reconstruction after
+  the run -51 `build_search_grid()` addition and got DIFFERENT numbers
+  than run -48's logged result (inner scale 1.015->0.995, err
+  0.09->0.03mm; outer scale 1.030->1.035, err 0.22->0.26mm) despite no
+  intentional change to patient001's own pipeline. Two candidate causes
+  existed simultaneously (both added between run -48 and now): the run
+  -53 calibration update (2->3 points, new `np.interp`-based
+  `_linear_weight`) and the run -51 dynamic search-grid widening.
+  Isolated by directly calling `fit_scale_curvature_weighted` with the
+  ORIGINAL default grid (`img_rows`/`img_cols`, +/-90 cells) but the
+  NEW 3-point calibration: **result exactly reproduced run -48's
+  original numbers (1.015/1.030)**. This proves the calibration change
+  had ZERO effect on patient001 (confirms the earlier reasoning: its
+  boundaries, 60/74-79 cells, sit close enough to the original 41-71
+  calibration range that the new R=88 point changes nothing measurable)
+  — **the search-grid widening is the entire cause**.
+- **Root cause, precisely**: patient001's own outer contour has
+  max radius 79.4 cells (not just its mean, 74.0) — `needed_extent =
+  max(ext_r_out.max(), ext_r_in.max()) * SCALE_GRID.max() + 15 = 119.0`
+  cells, which ALREADY exceeds the default grid's +/-90-cell coverage,
+  independent of patient023 entirely. This means **run -48's original
+  patient001 result was silently computed with a too-small search
+  grid** — `RegularGridInterpolator`'s `bounds_error=False,
+  fill_value=0.0` zero-filled the outer boundary's most eccentric
+  angular points at the largest candidate scales (near 1.31x) without
+  raising any error, undetected until the run -51 robustness fix
+  (added for patient023's much larger anatomy) incidentally also
+  triggered for patient001 and exposed it. The new numbers
+  (0.995/0.03mm inner, 1.035/0.26mm outer) are the CORRECTED,
+  more-complete-search-grid result — both still small, sub-mm errors,
+  not a qualitative change in the finding, just a quantitative
+  correction.
+- **Second, related bug found and fixed while diagnosing this**:
+  `phase3_mri_motion_cycle_reconstruction.py`'s copy of the same
+  grid-sizing check used the MEAN contour radius
+  (`ed_mean_r_out`/`ed_mean_r_in`) instead of the MAX, inconsistent
+  with the static script's (correct) convention — a real bug, though
+  by coincidence it did not cause additional clipping for either
+  patient001 or patient023 in the runs already logged (checked
+  directly: in both cases mean-based-extent-plus-margin still exceeded
+  the actual max-radius-scaled requirement). Fixed to also use
+  `.max()`, for consistency and to avoid relying on that coincidence
+  for future patients.
+- **Re-ran both of patient001's real-MRI results with the corrected
+  (max-based) wide grid**: static reconstruction now inner=0.995
+  (err=0.03mm), outer=1.035 (err=0.26mm) — supersedes run -48. Motion
+  cycle now inner RMSE=0.1996mm (was 0.2255mm), outer RMSE=0.4028mm
+  (was 0.4298mm) — supersedes run -50. Both changes are small
+  improvements, not regressions, and do not change either run's
+  reported conclusion (both boundaries recover with sub-mm/registration-
+  floor accuracy; patient001's contraction signal is still weak, per
+  run -50's original honest caveat).
+- Physical sanity checked? by whom?: Claude — direct A/B isolation
+  (same grid + new calibration reproduces old numbers exactly; same
+  calibration + new grid reproduces the new numbers) before attributing
+  cause, exactly the discipline this project has used throughout
+  (compare against a controlled baseline before trusting an
+  explanation).
+- Gate passed? (Y/N): N/A — correction/erratum.
+- Observations / surprises: a robustness fix added for one patient's
+  more extreme anatomy (patient023) silently improved (not broke)
+  another already-"validated" patient's (patient001) result, by
+  surfacing a pre-existing, previously-undetected search-grid clipping
+  issue that had been present since run -46/-47's original
+  infrastructure — a reminder that "already validated" numbers can
+  still rest on an unexamined implementation assumption (grid coverage
+  margin was never explicitly checked against the FULL 0.7-1.31 scale
+  sweep range for any patient before run -51), and that user skepticism
+  ("still broke somehow") is worth investigating with a controlled A/B
+  test rather than a plausible-sounding explanation.
+- Next action: none required — this is a closed correction. If any
+  further real-anatomy escalation is done, the grid-sizing check is now
+  consistent and max-based in both reconstruction scripts, so this
+  specific class of silent clipping should not recur.
+
+### Run 2026-07-08-56 — ISOLATED 8-probe test: real, partial improvement to patient023's outer boundary, confirming probe count is a genuine lever (not yet sufficient alone)
+- Phase: 3 (structural-fix attempt, per user: "so an 8-probe parallel
+  test? make sure you isolate the case, clone codes before editing and
+  leave the current code base intact"). `src/phase3_mri_8probe_test.py`
+  — FULLY SELF-CONTAINED: defines its own probe geometry, domain,
+  medium-building, capture, and curvature-weight logic from scratch
+  (cloned/adapted from the validated 4-probe infrastructure, not
+  imported from it); only imports pure, probe-count-independent helper
+  functions (`_polar_resample`, `r_at_theta`, `build_search_grid`) that
+  are unaffected by this test. No existing file modified — the
+  validated 4-probe pipeline is untouched.
+- Design: 8 probes at 45-degree spacing (0,45,90,...,315) instead of 4
+  at 90-degree spacing, same PROBE_DIST_CELLS=120 (standoff already
+  proven irrelevant, run -52 — probe COUNT is the only variable changed
+  here). Geometry verified before running: diagonal-probe positions and
+  src/rcv tangential-offset convention checked to exactly reproduce the
+  original 4-probe positions/offsets at the shared 0/90/180/270-degree
+  angles.
+- **Weight model generalization (a documented approximation, not a new
+  measurement)**: `pair_weight_at_R` was only ever calibrated at 3
+  baseline angles (0, 90, 180 degrees — runs -44/-53). The new
+  45/135-degree pairs this layout introduces are NOT independently
+  measured; their weight is a LINEAR INTERPOLATION (in baseline angle,
+  between the measured radius-dependent weight functions at the nearest
+  anchors) — e.g. at R=88, monostatic=1.0, 45deg-interpolated=0.5,
+  90/135/180deg=~0 (all measured/confirmed near-zero at this radius).
+  Flagged clearly so this is not later mistaken for a real calibration
+  result.
+- Result: **inner fitted scale=0.970 (err=0.18mm), outer fitted
+  scale=0.755 (err=2.16mm)**, vs. the 4-probe baseline's inner
+  err=0.45mm, outer err=2.43mm — both improved, outer by ~11%. More
+  informative than the raw number: the outer score curve
+  (`results/figures/phase3_mri_8probe_test_patient023.png`) now shows a
+  GENUINE SECONDARY PEAK right at the true scale=1.0 (height 0.975,
+  normalized) — this peak was essentially invisible (no local maximum
+  at all near 1.0) in every 4-probe test of patient023 (runs -51-54).
+  It just narrowly loses to the guard-band-edge peak (height 1.0) rather
+  than winning outright.
+- **Interpretation**: this is real, not placebo, evidence that adding
+  more monostatic-type probe angles genuinely recovers usable signal
+  for a large/flat reflector — confirms probe COUNT is a real lever for
+  this structural limitation, not just the interpolated weight
+  assumption doing all the work (a pure assumption artifact would be
+  unlikely to produce a correctly-located, competitive secondary peak
+  this close to the true answer). However, 8 probes and this
+  interpolated weight model are NOT sufficient to make that peak win
+  outright — the fix is directionally confirmed, not completed.
+- Physical sanity checked? by whom?: Claude — direct comparison against
+  the already-established 4-probe baseline (same patient, same
+  contour, same underlying method) as the control, and visual
+  inspection of the score curve shape (not just the final argmax
+  number) before drawing the interpretation above.
+- Gate passed? (Y/N): N/A — isolated exploratory test, deliberately
+  kept separate from the validated pipeline per user's explicit
+  instruction.
+- Next action: two clear, not-yet-attempted follow-ons if this is
+  pursued further: (1) measure the ACTUAL 45-degree (and 135-degree)
+  baseline amplitude ratio directly (extending run -44/-53's isolated
+  single-boundary calibration method to these new baseline angles,
+  replacing the current interpolation assumption with a real
+  measurement); (2) try more probes still (e.g. 12 or 16) now that 8 is
+  confirmed to help, to see whether the true-scale peak eventually
+  overtakes the guard-band-edge peak outright. Neither attempted here —
+  this run's purpose was answering "is probe count a real lever at
+  all", which it confirms.
+
+### Run 2026-07-08-57 — LOCAL-MAXIMUM-ONLY selection: near-complete fix for patient023's outer boundary (2.43mm -> 0.04mm), but reveals a real caveat in the homogeneous-medium control
+- Phase: 3 (readout-rule fix, per user diagnosis discussion: "visually
+  the fitter falls onto the tail which is an inaccurate approximate...
+  is it appropriate to mitigate or dampen the tail"). Diagnosed the
+  tail as leakage from the guard-band-excluded region bleeding into the
+  adjacent allowed scales (the backprojected field varies smoothly with
+  candidate scale, so scores just outside a hard exclusion cutoff stay
+  elevated) — explicitly REJECTED "dampening" the tail as unsafe (same
+  category of risk as the earlier-rejected constant-wall-thickness fix:
+  shaping the algorithm toward the expected answer rather than fixing
+  the mechanism). Implemented the safer alternative instead: require
+  the winning candidate to be a genuine LOCAL MAXIMUM (rises then falls
+  on both sides), not just the highest score in the allowed range —
+  disqualifies a monotonic climb into a hard cutoff by construction,
+  without presupposing where the true answer is.
+- Implementation: `select_best_local_peak()` added to the SAME isolated
+  `phase3_mri_8probe_test.py` from run -56 (still no existing/shared
+  file touched, per the user's standing "leave the codebase intact"
+  instruction) — splits the (possibly discontinuous, guard-band-gapped)
+  scale grid into contiguous segments, runs `scipy.signal.find_peaks`
+  on each segment separately (so a segment's own edge, e.g. immediately
+  next to the guard-band gap, is never mistaken for an interior peak,
+  matching what `find_peaks` already does at a true array boundary),
+  and picks the highest-scoring genuine peak across all segments.
+  Verified on synthetic data mimicking the observed tail shape BEFORE
+  running any new simulation: naive argmax picked the synthetic tail
+  edge, local-max-only selection correctly picked the synthetic
+  interior peak.
+- Result: **outer fitted scale=1.005 (true=1.000), error=0.04mm** —
+  down from 2.16mm (run -56, same 8 probes, naive argmax) and 2.43mm
+  (4-probe baseline) — essentially a complete fix. The outer fit's
+  confidence (best genuine peak vs. next-best genuine peak) is
+  **infinite** — once the tail is correctly disqualified as "not a
+  local max," only ONE real peak remains in the guarded range, and it
+  sits almost exactly on the true scale. Inner fit: scale=0.970,
+  err=0.18mm, confidence=1.20 (modest — a real secondary bump near
+  scale=1.15-1.2 is visible in the score curve,
+  `results/figures/phase3_mri_8probe_localmax_test_patient023.png`).
+- **Important caveat found while checking the homogeneous-medium
+  control (not skipped over)**: the control's INNER fit also reports
+  confidence=inf (landing at a plausible-looking scale=0.985) — pure
+  noise can also produce exactly one local max by chance, and this
+  rule cannot distinguish that from a genuine detection. The control's
+  OUTER fit is appropriately low-confidence (1.02). **Conclusion:
+  local-maximum-only selection is a real, principled improvement over
+  naive argmax (confirmed fixing a genuine artifact, not just moving
+  where the fit lands by assumption), but the confidence-ratio metric
+  alone is NOT a fully reliable stand-alone safety check against false
+  detections on absent signal** — a peak-height-relative-to-some-
+  absolute-baseline criterion (not just peak-vs-second-peak) would be
+  needed to fully close this gap, not yet implemented.
+- Physical sanity checked? by whom?: Claude — synthetic-data unit test
+  of the selection logic BEFORE trusting it on real simulated data
+  (per this project's standing discipline), plus the homogeneous
+  control check specifically flagged and reported rather than only
+  reporting the favorable real-data result.
+- Gate passed? (Y/N): N/A — isolated readout-rule fix, still deliberately
+  separate from the validated pipeline.
+- Next action: if this fix is to be ported into the shared, validated
+  pipeline (currently only exists in the isolated 8-probe script), it
+  should be combined with a real minimum-peak-height/absolute-baseline
+  check to close the homogeneous-control gap above — not yet done.
+  Also still open from run -56: measuring the real 45/135-degree
+  baseline ratio directly instead of interpolating.
+

@@ -767,3 +767,232 @@ eccentricity, not blind joint center+radius fitting — a separate,
 harder, not-yet-attempted problem); the curvature weight model is still
 only a 2-point linear fit; the concave heart-cartoon shape (run -37)
 has not yet been retested with this newer curvature-weighted approach.
+
+**FIRST REAL-ANATOMY ESCALATION PASSES (runs -47/-48): MRI-derived
+irregular ring (ACDC patient001, slice 4) reconstructed with sub-mm
+accuracy on both boundaries.** `src/phase3_mri_irregular_ring_prep.py`
+extracts a real myocardium+LV segmentation from ACDC patient001
+(mid-ventricular slice, max LV area), rescales it isotropically
+(shape-preserving) to this thread's toy scale (60 cells / 6mm LV
+radius, matching the synthetic tests) via nearest-neighbor resampling,
+then applies a light Gaussian smoothing pass (sigma=1.27 cells, tied to
+native pixel size) to remove nearest-neighbor staircasing while
+preserving genuine anatomical irregularity — output:
+`results/mri_irregular_ring_patient001_slice{4}.npz` (raw + smoothed
+masks/contours), figure `results/figures/phase3_mri_irregular_ring_prep.png`.
+Note: this patient/slice is a relatively mild/typical irregularity
+case (fairly round LV, roughly uniform wall thickness), not a
+dramatically pathological one — flagged to the user, who chose to
+proceed with it as the first test.
+`src/phase3_mri_irregular_ring_reconstruction.py` builds the acoustic
+medium DIRECTLY from the smoothed real masks (not a synthetic formula)
+and reuses run -46's validated curvature-weighted + guard-band fit,
+generalized so the "known shape family" is the real measured r(theta)
+per boundary (polar-resampled from the extracted contour, each
+boundary using its own centroid) with a SCALE FACTOR as the one free
+parameter, instead of a closed-form circle/polygon. Result: **inner
+(LV) fitted scale=1.015 (true=1.0), error=0.09mm; outer (epicardium)
+fitted scale=1.030 (true=1.0), error=0.22mm; not locked to inner**;
+fitted contours visually track the real irregular boundary shape (not
+a smoothed circle approximation) in
+`results/figures/phase3_mri_irregular_ring_reconstruction.png`. One bug
+caught and fixed during this run: an initial guard-band implementation
+operated in SCALE units instead of physical-radius-cells units (the
+quantity run -45/46's guard band was actually designed to protect),
+causing a false "outer locks to inner" failure (err=1.44mm) until
+converted back to radius-cells units, matching run -45/46 exactly.
+Single static frame only (real segmentation is one ED timepoint, not a
+motion cycle) — multi-frame real motion and a more dramatically
+asymmetric (HCM/DCM) patient/slice remain open, not-yet-attempted
+follow-ons.
+
+New files this run: `jwave_test/src/phase3_mri_irregular_ring_prep.py`,
+`jwave_test/src/phase3_mri_irregular_ring_reconstruction.py`,
+`jwave_test/results/mri_irregular_ring_patient001_slice4.npz`,
+`jwave_test/results/figures/phase3_mri_irregular_ring_prep.png`,
+`jwave_test/results/figures/phase3_mri_irregular_ring_reconstruction.png`.
+`requirements.txt` gained `scikit-image==0.26.0` (contour extraction).
+
+**FIRST REAL-MOTION ESCALATION (runs -49/-50): 8-phase cycle built by
+interpolating the Phase I registration-derived ED->ES displacement
+field (not raw consecutive slices, not raw consecutive cine frames) —
+acoustic reconstruction survives it, sub-mm accuracy, but this
+patient/slice's true contraction signal is weaker than that error.**
+`src/phase3_mri_motion_cycle_prep.py` applies
+`pilot/data/processed/ACDC_reg/patient001.npz`'s ED->ES displacement
+field at fractional strength (half-cosine schedule, 8 equally-spaced
+phases) via nearest-neighbor `map_coordinates` warping of the ED
+myo/LV masks — convention cross-checked against Phase I's own
+Dice-validated `warped_ed_mask` (98.7% agreement) before trusting it.
+Registration quality for this patient is flagged honestly:
+mean_dice=0.784, myo_dice=0.789 (below the pilot's own 0.80 Gate-3
+threshold). Real contraction here is subtle: true inner mean-radius
+only spans 6.03mm->5.94mm (0.10mm) across the whole cycle, far smaller
+than the synthetic toy's deliberate 6mm->4mm. Output:
+`results/mri_motion_cycle_patient001_slice4.npz`, figure
+`results/figures/phase3_mri_motion_cycle_prep_filmstrip.png`.
+`src/phase3_mri_motion_cycle_reconstruction.py` reruns the validated
+curvature-weighted + guard-band multistatic backprojection at each of
+the 8 phases, fitting a SCALE FACTOR against the FIXED ED r(theta)
+template (not re-derived per frame) — testing whether one scale
+parameter tracks genuinely non-uniform real wall motion. Result: inner
+RMSE=0.2255mm, outer RMSE=0.4298mm (both within the ~1.5mm registration
+floor), fitted contours visually track the true non-uniform
+deformation in `results/figures/phase3_mri_motion_cycle_reconstruction.png`.
+**Honest caveat**: the true signal (0.10mm radius span) is smaller than
+the reconstruction's own RMSE — this patient/slice demonstrates the
+method survives real non-uniform motion without collapsing, but is too
+weak a contraction signal to demonstrate accurate contraction-tracking.
+A higher-ejection-fraction-change patient would be a sharper test.
+`labels.GT_FLOOR_CAPTION` applied (first use of real, imperfect ground
+truth in this thread, rather than exact toy/segmentation values).
+
+New files this run: `jwave_test/src/phase3_mri_motion_cycle_prep.py`,
+`jwave_test/src/phase3_mri_motion_cycle_reconstruction.py`,
+`jwave_test/results/mri_motion_cycle_patient001_slice4.npz`,
+`jwave_test/results/figures/phase3_mri_motion_cycle_prep_filmstrip.png`,
+`jwave_test/results/figures/phase3_mri_motion_cycle_reconstruction.png`.
+
+**PATIENT023 SELECTED FOR ADEQUATE CONTRACTION (runs -51/-52/-53): scan
+of all 150 ACDC patients found patient001 (used so far) has only ~10%
+LV contraction — patient023 has ~45% (ED 20.97mm -> ES 11.53mm),
+myo_dice=0.870 (above pilot's 0.80 threshold), same slice index 4.**
+`phase3_mri_irregular_ring_prep.py` and `_reconstruction.py` generalized
+to take a `PATIENT_ID` CLI arg (default patient001) instead of being
+duplicated per patient; output files now include the patient ID
+(`results/mri_irregular_ring_{PATIENT_ID}_slice{z}.npz`,
+`results/figures/phase3_mri_irregular_ring_{prep,reconstruction}_{PATIENT_ID}.png`).
+
+Static reconstruction on patient023 found a NEW limitation: inner
+fit is solid (scale=0.925, err=0.45mm) but outer fit is poor
+(scale=0.725, err=2.43mm, noisy multi-peaked score curve) — traced to
+patient023's proportionally thicker real wall (outer mean radius=88.2
+cells vs patient001's 74.0, same 60-cell toy LV radius). Also required
+a dynamically-sized search grid (`build_search_grid()` added to
+`phase3_mri_irregular_ring_reconstruction.py`) since the default
++/-90-cell grid clipped this patient's larger anatomy.
+
+Two hypotheses tested directly (not assumed) per user's questions:
+1. **Probe standoff** (`src/phase3_mri_wide_probe_standoff_test.py`,
+   self-contained, does not modify the shared probe-geometry module):
+   doubling patient023's standoff (46->92 cells) gave an IDENTICAL
+   result — ruled out.
+2. **Curvature-weight calibration range** (`src/phase3_ring_calibration_r88.py`):
+   measured cross/monostatic and antipodal/monostatic amplitude ratios
+   directly at R=88 (patient023's real outer radius, beyond run -44's
+   original R=41/71 calibration) — both ~0, CONFIRMING (not correcting)
+   the model's already-clipped-to-zero extrapolated value there.
+   `phase3_ring_curvature_weighted_fit.py`'s `_CAL_R/_CAL_CROSS/_CAL_ANTIPODAL`
+   extended to 3 measured points (41, 71, 88); `_linear_weight` switched
+   from hand-rolled slope-extrapolation to `np.interp` (flagged: a minor
+   behavior change for candidate R<41, not believed to affect any prior
+   logged result's selected best-R). Re-running patient023 with the
+   updated calibration gave an IDENTICAL result to before recalibration.
+
+**Conclusion**: patient023's noisy outer fit is a genuine STRUCTURAL
+limitation (a large/flat reflector genuinely returns near-zero energy
+to all but the 4 monostatic pairs, confirmed with real measurements at
+R=88, not assumed) — not a calibration bug, not a standoff artifact.
+Fixing it for real would need more independent probe angles, not a
+coefficient tweak. Carried forward as an open, well-understood
+limitation rather than force-fixed.
+
+New/changed files: `jwave_test/src/phase3_mri_wide_probe_standoff_test.py`,
+`jwave_test/src/phase3_ring_calibration_r88.py`,
+`jwave_test/results/mri_irregular_ring_patient023_slice4.npz`,
+`jwave_test/results/figures/phase3_mri_irregular_ring_prep_patient023.png`,
+`jwave_test/results/figures/phase3_mri_irregular_ring_reconstruction_patient023.png`,
+`jwave_test/results/figures/phase3_mri_wide_probe_standoff_test_patient023.png`.
+
+**PATIENT023 MOTION-CYCLE RESULT (run -54): inner boundary demonstrates
+real contraction-tracking (not just survival); outer boundary shows
+the structural bias consistently, confirming the diagnosis.**
+`phase3_mri_motion_cycle_prep.py`/`_reconstruction.py` generalized to
+`PATIENT_ID` CLI arg + max-LV-area slice auto-selection. True signal:
+inner mean-radius spans 6.02->4.93mm (1.09mm span, 11x patient001's
+0.10mm). Inner RMSE=0.8014mm (smaller than the true signal span — real
+tracking demonstrated, not just non-collapse). Outer RMSE=2.2940mm,
+remarkably stable across all 8 phases (1.97-2.49mm) — phase-independence
+itself corroborates the run -51/-53 structural-limitation diagnosis
+(a geometry-dependent bias should be constant regardless of contraction
+phase, unlike a signal-strength-dependent error). Visually, fitted
+outer contour sits consistently inside the true outer contour at every
+phase (systematic inward bias, not noise) —
+`results/figures/phase3_mri_motion_cycle_reconstruction_patient023.png`.
+
+This closes out the real-MRI escalation arc for this thread (synthetic
+eccentric ring -> real static shape -> real motion cycle, both
+patient001 and patient023). Open follow-ons: (1) more independent probe
+angles to fix the structural outer-boundary limit; (2) a more
+dramatically asymmetric (HCM/DCM) patient for boundary SHAPE
+irregularity specifically; (3) independently registering ED to real
+intermediate cine frames; (4) the multi-compartment/multi-chamber
+full-heart escalation (previously deferred).
+
+New files: `jwave_test/results/mri_motion_cycle_patient023_slice4.npz`,
+`jwave_test/results/figures/phase3_mri_motion_cycle_prep_filmstrip_patient023.png`,
+`jwave_test/results/figures/phase3_mri_motion_cycle_reconstruction_patient023.png`.
+
+**CORRECTION (run -55): patient001's runs -48/-50 numbers superseded —
+cause was the search-grid widening (run -51), NOT the calibration
+update (run -53).** Confirmed via direct A/B isolation: default grid +
+new calibration exactly reproduces run -48's original numbers;
+default calibration + new grid reproduces the new ones. Root cause:
+patient001's own outer contour has max radius 79.4 cells (needed_extent
+119.0 cells at the sweep's largest scale), which already exceeded the
+default +/-90-cell grid *before* patient023 was ever introduced —
+`RegularGridInterpolator`'s `fill_value=0.0` silently zero-filled the
+most eccentric angular points at large candidate scales, undetected
+until run -51's robustness fix (added for patient023) incidentally
+also triggered for patient001. Also fixed a real (if so-far-inert)
+inconsistency: `phase3_mri_motion_cycle_reconstruction.py`'s grid-sizing
+check used MEAN contour radius instead of MAX (like the static script),
+now corrected to `.max()` in both.
+**Corrected numbers (supersede runs -48/-50):** static reconstruction
+inner scale=0.995 (err=0.03mm), outer scale=1.035 (err=0.26mm); motion
+cycle inner RMSE=0.1996mm (was 0.2255mm), outer RMSE=0.4028mm (was
+0.4298mm). Both are small improvements, not regressions — no
+conclusion from runs -48/-50 changes qualitatively.
+
+**ISOLATED 8-PROBE TEST (run -56): real, partial fix for the structural
+outer-boundary limitation.** `src/phase3_mri_8probe_test.py` — a fully
+self-contained script (own probe geometry/domain/capture/weight logic,
+no existing file modified) testing 8 probes at 45-degree spacing (vs.
+the standard 4 at 90-degree spacing) on patient023. Weight model for
+the new 45/135-degree baseline pairs is a documented INTERPOLATION
+approximation (not a new measurement) between the existing 0/90/180-
+degree calibration anchors. Result: outer error improved 2.43mm->2.16mm
+(~11%); more tellingly, the outer score curve now shows a genuine
+secondary peak AT the true scale=1.0 (previously invisible in every
+4-probe test) that narrowly loses to the guard-band-edge peak rather
+than winning outright. Confirms probe count is a real lever for this
+limitation, not fully sufficient at 8 probes alone. Open follow-ons:
+measure the real 45-degree baseline ratio directly (replacing the
+interpolation assumption); try more probes (12-16).
+
+New files: `jwave_test/src/phase3_mri_8probe_test.py`,
+`jwave_test/results/figures/phase3_mri_8probe_test_patient023.png`.
+
+**LOCAL-MAXIMUM-ONLY SELECTION (run -57): outer error 2.43mm -> 0.04mm,
+essentially a complete fix.** Diagnosed the "tail" (naive argmax landing
+on the guard-band cutoff edge) as leakage from the excluded region, not
+genuine signal — REJECTED dampening it (unsafe, shapes the algorithm
+toward the expected answer) in favor of `select_best_local_peak()`
+(added to the same isolated `phase3_mri_8probe_test.py`): require the
+winning candidate to be a genuine local maximum (rises then falls),
+splitting the guard-band-gapped scale grid into contiguous segments
+first so a segment's own edge is never mistaken for an interior peak.
+Verified on synthetic data before trusting it on real simulation.
+Result: outer scale=1.005 (err=0.04mm), confidence=inf (only one
+genuine peak survives once the tail is disqualified). Inner
+scale=0.970 (err=0.18mm), confidence=1.20.
+**Caveat found, not hidden**: the homogeneous-medium control's INNER
+fit also reports confidence=inf (pure noise can have exactly one local
+max by chance) — local-max-only selection is a real, principled
+improvement, but the confidence-ratio metric alone is not a fully
+reliable stand-alone safety check against false detections on absent
+signal; a peak-height-vs-absolute-baseline criterion would be needed
+to close this gap, not yet implemented.
+
+New/updated: `jwave_test/src/phase3_mri_8probe_test.py` (extended with
+`select_best_local_peak`), `jwave_test/results/figures/phase3_mri_8probe_localmax_test_patient023.png`.

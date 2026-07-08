@@ -4,6 +4,11 @@ data/
 *.nii.gz
 *.dcm
 jwave_test/results/phase4_pilot_dataset/
+# Rescaled/smoothed masks + contours derived directly from real ACDC
+# patient anatomy (patient001/023) -- same caution as phase4_pilot_dataset,
+# even though these are abstracted to a toy domain scale.
+jwave_test/results/mri_irregular_ring_*.npz
+jwave_test/results/mri_motion_cycle_*.npz
 
 # Python
 __pycache__/
