@@ -1143,3 +1143,31 @@ patient023 when frac=0.95 (phase 4/5) works excellently.
 
 New files: `jwave_test/src/phase3_diagnose_true_shape_signal.py`,
 `jwave_test/results/figures/phase3_diagnose_true_shape_signal_patient023.png`.
+
+**LITERATURE GROUNDING + COHERENCE FACTOR IMPLEMENTED (run -67).** Web
+research mapped this session's ad hoc fixes onto established fields:
+(1) "more probes" = Full Matrix Capture/Total Focusing Method (FMC-TFM)
+in ultrasonic NDT; (2) "confidence=inf but wrong" = a documented,
+known limitation of Coherence Factor (CF) adaptive beamforming (weak
+real signals get suppressed by a small CF, exactly matching run -64's
+finding); (3) "safe temporal borrowing" = robust/outlier-aware Kalman
+filtering + spatiotemporal-regularized cardiac speckle-tracking echo
+(confidence-gated + temporal-smoothness, a validated combination for
+this exact clinical application).
+
+Implemented a proper Mallart-Fink-style CF in
+`phase3_mri_8probe_test.py`'s `fit_scale_curvature_weighted` (now a
+6-tuple return, pairs treated as "channels"). Result on patient023's
+motion cycle: **inner channel — CF cleanly flags phase 2/5 as worst
+(0.270 vs 0.428-0.507 elsewhere).** **Outer channel — CF does NOT
+cleanly rank accuracy**: phase 2/5 still gets lowest CF (correctly),
+but phase 1/6 (a genuinely bad result) has the HIGHEST outer CF,
+while phase 3/4 (the best result) has one of the lowest — same
+miscalibration pattern as `prominence` (run -65), now confirmed with a
+literature-standard formula too. Conclusion: CF/prominence/SNR/temporal
+-consistency all agree on catching the ONE catastrophic case but
+disagree on ranking moderate frames — likely reflects the outer
+boundary's structurally lower signal redundancy (runs -44/-53), not a
+fixable confidence-formula issue. Robust/outlier-aware temporal
+filtering (the third literature-grounded direction) remains
+unimplemented as an actual estimator — still just a diagnostic flag.

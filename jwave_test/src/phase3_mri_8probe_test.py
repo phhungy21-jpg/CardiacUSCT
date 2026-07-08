@@ -279,6 +279,26 @@ def select_best_local_peak(scale_grid, scores, step_tol=1.5):
     return scale_grid[best_pos], best_score, True, confidence, prominence
 
 
+def _coherence_factor(per_pair_contributions_at_idx):
+    """Mallart-Fink-style Coherence Factor, adapted from adaptive
+    ultrasound beamforming (per user's literature search: 'coherence
+    factor beamforming' -- CF = |sum of channel signals|^2 / (N * sum of
+    |channel signal|^2)). Here each 'channel' is one tx/rx PAIR's
+    weighted contribution to the candidate score, not an array element,
+    but the principle is identical: CF=1 means many pairs agree/
+    contribute coherently (a real reflector); CF near 1/N means the
+    score is dominated by one or a few outlier pairs while the rest
+    contribute near-zero or conflicting evidence -- exactly the
+    signature of a false/noise-level peak, independent of whether that
+    peak happens to be tall or technically a local max."""
+    c = np.asarray(per_pair_contributions_at_idx)
+    n = len(c)
+    denom = n * np.sum(c ** 2)
+    if denom < 1e-12:
+        return 0.0
+    return float((np.sum(c) ** 2) / denom)
+
+
 def fit_scale_curvature_weighted(pairs, ext_theta, ext_r, scale_grid, origin, img_rows_g, img_cols_g):
     RR, CC = np.meshgrid(img_rows_g, img_cols_g, indexing="ij")
     per_pair_grids = {}
@@ -292,18 +312,21 @@ def fit_scale_curvature_weighted(pairs, ext_theta, ext_r, scale_grid, origin, im
         key: RegularGridInterpolator((img_rows_g, img_cols_g), np.abs(grid), bounds_error=False, fill_value=0.0)
         for key, grid in per_pair_grids.items()
     }
+    pair_keys = list(interpolators.keys())
     scores = np.zeros(len(scale_grid))
+    per_pair_contributions = np.zeros((len(scale_grid), len(pair_keys)))
     for i, s in enumerate(scale_grid):
         d_vals = r_at_theta(_THETAS, ext_theta, ext_r) * s
         d_rows, d_cols = direction_vector(_THETAS)
         pts = np.stack([origin[0] + d_vals * d_rows, origin[1] + d_vals * d_cols], axis=1)
-        total = 0.0
-        for (tx, rx), interp in interpolators.items():
+        for j, (tx, rx) in enumerate(pair_keys):
             w = pair_weight_at_R(tx, rx, np.mean(d_vals))
-            total += w * interp(pts).sum()
-        scores[i] = total
+            per_pair_contributions[i, j] = w * interpolators[(tx, rx)](pts).sum()
+        scores[i] = per_pair_contributions[i].sum()
     best_scale, _, is_genuine_peak, confidence, prominence = select_best_local_peak(scale_grid, scores)
-    return best_scale, scores, is_genuine_peak, confidence, prominence
+    best_idx = int(np.argmin(np.abs(scale_grid - best_scale)))
+    cf = _coherence_factor(per_pair_contributions[best_idx])
+    return best_scale, scores, is_genuine_peak, confidence, prominence, cf
 
 
 SCALE_GRID = np.arange(0.7, 1.31, 0.005)
@@ -365,13 +388,13 @@ if __name__ == "__main__":
     print("=== Simulating homogeneous reference ===")
     pairs_ref = capture_all_pairs(build_medium_homogeneous())
 
-    fitted_s_in, scores_in, in_is_peak, in_conf, in_prom = fit_scale_curvature_weighted(pairs_real, ext_theta_in, ext_r_in, SCALE_GRID, lv_centroid_dom, img_rows_g, img_cols_g)
-    fitted_s_in_ref, _, in_ref_is_peak, in_ref_conf, in_ref_prom = fit_scale_curvature_weighted(pairs_ref, ext_theta_in, ext_r_in, SCALE_GRID, lv_centroid_dom, img_rows_g, img_cols_g)
+    fitted_s_in, scores_in, in_is_peak, in_conf, in_prom, in_cf = fit_scale_curvature_weighted(pairs_real, ext_theta_in, ext_r_in, SCALE_GRID, lv_centroid_dom, img_rows_g, img_cols_g)
+    fitted_s_in_ref, _, in_ref_is_peak, in_ref_conf, in_ref_prom, in_ref_cf = fit_scale_curvature_weighted(pairs_ref, ext_theta_in, ext_r_in, SCALE_GRID, lv_centroid_dom, img_rows_g, img_cols_g)
 
     fitted_inner_mean_radius = fitted_s_in * ext_r_in.mean()
     scale_grid_guarded = SCALE_GRID[np.abs(SCALE_GRID * ext_r_out.mean() - fitted_inner_mean_radius) > GUARD_BAND_CELLS]
-    fitted_s_out, scores_out, out_is_peak, out_conf, out_prom = fit_scale_curvature_weighted(pairs_real, ext_theta_out, ext_r_out, scale_grid_guarded, ring_centroid_dom, img_rows_g, img_cols_g)
-    fitted_s_out_ref, _, out_ref_is_peak, out_ref_conf, out_ref_prom = fit_scale_curvature_weighted(pairs_ref, ext_theta_out, ext_r_out, SCALE_GRID, ring_centroid_dom, img_rows_g, img_cols_g)
+    fitted_s_out, scores_out, out_is_peak, out_conf, out_prom, out_cf = fit_scale_curvature_weighted(pairs_real, ext_theta_out, ext_r_out, scale_grid_guarded, ring_centroid_dom, img_rows_g, img_cols_g)
+    fitted_s_out_ref, _, out_ref_is_peak, out_ref_conf, out_ref_prom, out_ref_cf = fit_scale_curvature_weighted(pairs_ref, ext_theta_out, ext_r_out, SCALE_GRID, ring_centroid_dom, img_rows_g, img_cols_g)
 
     in_err_mm = abs(fitted_s_in - 1.0) * ext_r_in.mean() * dx[0] * 1e3
     out_err_mm = abs(fitted_s_out - 1.0) * ext_r_out.mean() * dx[0] * 1e3
@@ -379,12 +402,12 @@ if __name__ == "__main__":
 
     print(f"\n--- Result (8-probe test, LOCAL-MAXIMUM-ONLY selection) ---")
     print(f"  inner: fitted scale={fitted_s_in:.3f} (true=1.000), error={in_err_mm:.2f}mm, "
-          f"genuine_local_max={in_is_peak}, confidence={in_conf:.2f}, prominence={in_prom:.2f}")
+          f"genuine_local_max={in_is_peak}, confidence={in_conf:.2f}, prominence={in_prom:.2f}, CF={in_cf:.3f}")
     print(f"  outer: fitted scale={fitted_s_out:.3f} (true=1.000), error={out_err_mm:.2f}mm, "
-          f"locked_to_inner={locked}, genuine_local_max={out_is_peak}, confidence={out_conf:.2f}, prominence={out_prom:.2f}")
-    print(f"  homogeneous control: inner={fitted_s_in_ref:.3f} (conf={in_ref_conf:.2f}), "
-          f"outer={fitted_s_out_ref:.3f} (conf={out_ref_conf:.2f}) "
-          f"-- should be LOW confidence even if a plausible-looking scale is picked")
+          f"locked_to_inner={locked}, genuine_local_max={out_is_peak}, confidence={out_conf:.2f}, prominence={out_prom:.2f}, CF={out_cf:.3f}")
+    print(f"  homogeneous control: inner={fitted_s_in_ref:.3f} (conf={in_ref_conf:.2f}, CF={in_ref_cf:.3f}), "
+          f"outer={fitted_s_out_ref:.3f} (conf={out_ref_conf:.2f}, CF={out_ref_cf:.3f}) "
+          f"-- should be LOW CF even if a plausible-looking scale is picked")
     print(f"\n  4-probe baseline (runs -51/-53, global argmax): inner err=0.45mm, outer err=2.43mm")
     print(f"  8-probe, global-argmax result (run -56): inner err=0.18mm, outer err=2.16mm")
 

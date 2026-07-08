@@ -4499,3 +4499,78 @@ forward are `jwave_test/`-specific (Phase 2 work).
   specific configuration, not a template-shape problem. Not
   investigated further this run.
 
+### Run 2026-07-08-67 — Web research maps the session's ad hoc fixes onto established named fields; Coherence Factor implemented and tested — catches the worst failure, but doesn't cleanly rank the rest
+- Phase: 3 (literature grounding + confidence-metric refinement). Per
+  user's request to search for prior art on this class of problem
+  ("i dont even know what this branch in math is called"): identified
+  three established, directly-applicable fields via web search (see
+  MEMORY.md / conversation for full citations): (1) **Full Matrix
+  Capture / Total Focusing Method (FMC-TFM)**, the industry-standard
+  ultrasonic-NDT technique of capturing every tx/rx element combination
+  and coherently summing across all of them specifically to be robust
+  to any single viewing angle hitting an unfavorable (non-specular)
+  facet on a rough/irregular surface — validates the "more probes"
+  direction (runs -56/-63) as a known, standard technique, not a novel
+  idea; (2) **Coherence Factor (CF) adaptive beamforming** in medical
+  ultrasound, which has a documented, exact match to this project's
+  "confidence=inf but wrong" finding: literature explicitly states a
+  weak-but-real signal gets a small CF, which further compresses
+  (suppresses) it — the same failure mode diagnosed in run -64,
+  independently confirmed as a known open limitation in the field, not
+  a bug specific to this project's implementation; (3) **robust/
+  outlier-aware Kalman filtering** (Student-t process noise,
+  Mahalanobis-distance gating) plus **spatiotemporal-regularized
+  cardiac speckle-tracking echocardiography** (confidence-thresholded
+  correlation coefficients combined with temporal smoothness
+  constraints) — a field-validated precedent for exactly the "borrow
+  from confident neighboring frames without masking genuine abrupt
+  motion" design the user flagged as a risk (correctly identifying it
+  as structurally the same danger as "outer locks onto inner",
+  runs -39/-41).
+- Implemented item (2) directly: replaced the ad hoc `prominence`
+  metric's role (partially) with a proper Mallart-Fink-style Coherence
+  Factor, `CF = |sum_i c_i|^2 / (N_pairs * sum_i c_i^2)`, where `c_i` is
+  each tx/rx PAIR's own weighted contribution to the winning candidate
+  score (pairs treated as the "channels", analogous to array elements
+  in real adaptive beamforming). Added to `phase3_mri_8probe_test.py`'s
+  `fit_scale_curvature_weighted` (now returns a 6-tuple including CF);
+  all call sites in this file and `phase3_mri_8probe_motion_cycle_test.py`
+  updated; import-checked before running.
+- **Result on patient023's full motion cycle**: **inner channel: CF
+  cleanly discriminates** — phase 2/5 (the known failure) has the
+  lowest CF (0.270) vs. 0.428-0.507 at every other phase, consistent
+  with prominence's earlier finding. **Outer channel: CF does NOT
+  cleanly rank accuracy** — phase 2/5 still gets the lowest CF (0.134,
+  correctly flagged as worst), but phase 1/6 (a genuinely BAD result,
+  err=2.34mm) has the HIGHEST outer CF (0.323) of the whole cycle,
+  while phase 3/4 (the BEST result, err=0.34mm) has one of the LOWEST
+  (0.168) — the same outer-channel miscalibration pattern already seen
+  with the `prominence` metric (run -65), now confirmed to also apply
+  to a properly-sourced, literature-standard CF formula, not just the
+  ad hoc metric. **Conclusion: CF (like prominence) reliably catches
+  the single worst catastrophic failure, but is not yet a reliable
+  continuous accuracy predictor across all frames, particularly for
+  the outer boundary.**
+- Physical sanity checked? by whom?: Claude — checked CF's ranking
+  against KNOWN per-frame errors (not just its own internal logic)
+  before drawing the "doesn't cleanly rank" conclusion, i.e. verified
+  against ground truth rather than assuming a textbook metric would
+  automatically transfer cleanly to this project's specific geometry.
+- Gate passed? (Y/N): N/A — confidence-metric refinement, literature-
+  grounding exercise.
+- Next action: CF/prominence/SNR/temporal-consistency now form a
+  redundant, partially-overlapping set of signals that all agree on
+  the ONE clear catastrophic case (phase 2/5) but disagree in the
+  middle (moderate-accuracy frames). This suggests the outer channel's
+  overall lower/noisier coherence (all outer CFs sit well below inner
+  CFs, 0.13-0.32 vs 0.27-0.51) may itself be a structural property of
+  the outer boundary's curvature-driven signal weakness (runs -44/-53),
+  not something a smarter confidence formula alone can fully resolve —
+  consistent with this project's standing finding that the outer
+  boundary's fundamental signal redundancy is lower than the inner
+  boundary's, independent of which confidence metric is used to
+  measure it. Robust/outlier-aware temporal filtering (the second
+  literature-grounded direction) has not yet been implemented as an
+  actual estimator (only the diagnostic flag from run -65 exists) —
+  remains the next concrete step if this thread continues.
+
