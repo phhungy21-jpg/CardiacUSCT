@@ -1263,3 +1263,25 @@ method. Commit is LOCAL ONLY, not pushed.
 
 New files: `jwave_test/src/phase3_blind_shape_reconstruction_test_8probe.py`,
 `jwave_test/results/figures/phase3_blind_shape_reconstruction_test_8probe_ring.png`.
+
+**BLIND RECONSTRUCTION ON OFF-CENTER CONCAVE HEART, 8 PROBES (run
+-72): substantially harder than the circle, genuine surprise about
+WHERE it breaks.** `src/phase3_blind_shape_reconstruction_test_8probe_heart.py`
+— same blind method, same 8 probes, on the off-center 10-vertex
+concave heart phantom from runs -37/-38 (only known center given, no
+shape info). RMSE=1.544mm — worse than even the 4-probe CIRCLE result
+(1.38mm), 51% of angles >1.0mm error, visually confirmed as wild
+ghost-artifact spikes (not smooth bias). **Surprise**: the CONCAVE
+notch (predicted by run -36's mechanism to be a likely ghost source)
+shows EXCELLENT accuracy (0.10-0.18mm); the sharp CONVEX tip is where
+it breaks down (0.87-1.90mm) — the opposite of the pre-run hypothesis,
+reported honestly rather than omitted. Conclusion: "more probes helps"
+does not automatically generalize from a circle to genuinely irregular
+multi-featured shapes for BLIND reconstruction — ghost mechanisms
+multiply with shape complexity. Not yet tested: whether the non-blind
+global shape-fit method (already validated on this same phantom,
+runs -37/-38) also struggles with 8 probes, to isolate whether this is
+blind-discovery-specific. Commit is LOCAL ONLY, not pushed.
+
+New files: `jwave_test/src/phase3_blind_shape_reconstruction_test_8probe_heart.py`,
+`jwave_test/results/figures/phase3_blind_shape_reconstruction_test_8probe_heart.png`.

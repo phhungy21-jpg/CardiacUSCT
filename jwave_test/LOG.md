@@ -4855,3 +4855,60 @@ forward are `jwave_test/`-specific (Phase 2 work).
   Per user instruction, NOT pushed to origin — commit is local-only on
   `phase3-8probe-localmax-experiment` pending explicit push request.
 
+### Run 2026-07-08-72 — Blind reconstruction, 8 probes, off-center CONCAVE heart phantom: substantially harder than the circle — RMSE 1.54mm (worse than even the 4-probe circle result), with a genuine surprise about WHERE it breaks
+- Phase: 3 (escalation past the simplest case, per user: "try 8 probe
+  with an off center heart shape"). `src/phase3_blind_shape_reconstruction_test_8probe_heart.py`
+  — identical per-angle blind method (runs -70/-71), same 8-probe
+  geometry, but on the off-center, 10-vertex CONCAVE heart phantom
+  from runs -37/-38 (the shape that originally broke every fixed
+  pair-subset rule and motivated the global shape-fit pivot). The
+  blind search is given ONLY the known center (`SHIFTED_CENTER`) — no
+  polygon/vertex information at all; ground truth (`ray_heart_distance`,
+  correctly handles the concave notch's multi-edge intersection) used
+  only for scoring afterward, never fed to the search.
+- **Result: substantially harder than the circle, even with 8
+  probes.** RMSE=1.5440mm — WORSE than even the 4-probe CIRCLE result
+  (1.3816mm, run -70), let alone the 8-probe circle result (0.3249mm,
+  run -71). 74/144 (~51%) of angles have error >1.0mm — roughly HALF
+  the boundary, vs. the 8-probe circle's ~5.5%. Visually confirmed
+  (`results/figures/phase3_blind_shape_reconstruction_test_8probe_heart.png`):
+  the discovered contour tracks the true heart boundary reasonably in
+  some sectors but shows WILD, erratic spikes in others (up to 81 cells
+  vs. true ~48 near theta=65-70deg) — genuine ghost artifacts, not a
+  smooth systematic bias.
+- **Genuine surprise, reported rather than smoothed over**: run -36's
+  established mechanism predicted the CONCAVE notch (a sharp curvature
+  discontinuity, same class of feature as a convex corner) should be a
+  likely diffraction/ghost source. Instead, **the notch region
+  (theta~0deg) shows EXCELLENT accuracy (0.10-0.18mm)** — some of the
+  best accuracy anywhere on this shape — while **the sharp CONVEX tip
+  (theta~180deg) is where accuracy breaks down badly (0.87-1.90mm)**.
+  This is the opposite of the notch-specific concern the docstring
+  went in expecting to highlight. Not explained this run — a genuine,
+  open, non-obvious finding (concavity alone does not predict where
+  blind reconstruction fails; something about this shape's specific
+  local curvature/orientation relative to the fixed probe directions
+  matters more than convex-vs-concave per se).
+- Physical sanity checked? by whom?: Claude — ground truth computed
+  independently via the already-validated multi-edge ray-intersection
+  function (not assumed); visual confirmation of both the general
+  noisiness AND the specific notch-vs-tip asymmetry before reporting it
+  as a surprise rather than silently omitting the inconvenient direction
+  the pre-run hypothesis got wrong.
+- Gate passed? (Y/N): N/A — escalation/exploratory test.
+- Next action: this result argues that "more probes helps" (cleanly
+  confirmed for a circle, run -71) does NOT automatically generalize to
+  genuinely irregular, multi-featured real anatomy — the ghost
+  mechanisms multiply with shape complexity in ways that may need
+  more than a linear increase in probe count, or the global shape-fit
+  integration this thread already validated (runs -37/-38) as the
+  actual fix for exactly this class of shape. Not yet tested: (1)
+  whether the SAME global shape-fit approach (known polygon family, one
+  scale parameter — i.e. NOT blind) recovers this heart phantom cleanly
+  with 8 probes, to isolate whether the harder case is fundamental to
+  blind discovery specifically or would also affect the non-blind
+  method; (2) the real, irregular MRI shape (patient001) blind test,
+  still not attempted. Per user instruction, NOT pushed to origin —
+  commit is local-only on `phase3-8probe-localmax-experiment` pending
+  explicit push request.
+
