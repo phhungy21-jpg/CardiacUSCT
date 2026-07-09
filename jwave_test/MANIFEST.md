@@ -1383,3 +1383,42 @@ New files: `jwave_test/src/phase3_heart_all_vertices_sensitivity_test.py`,
 `jwave_test/src/phase3_real_contour_sensitivity_test.py`,
 `jwave_test/results/figures/phase3_heart_all_vertices_sensitivity_test.png`,
 `jwave_test/results/figures/phase3_real_contour_sensitivity_test.png`.
+
+**RAW PER-PAIR SENSITIVITY CHECK (run -76): inconclusive by design, not
+a physics finding.** `src/phase3_raw_pair_sensitivity_test.py` tested
+whether run -75's ghost-dominated locations show real per-pair signal
+the weighted-sum discards, using a positive control (the known-clean
+notch) to validate the test first — the control scored WORST (8/64,
+12.5%) of all 8 locations tested, meaning this single-timepoint,
+single-pair sampling method is too fragile to trust either way.
+Superseded by run -77.
+
+New files: `jwave_test/src/phase3_raw_pair_sensitivity_test.py`,
+`jwave_test/results/figures/phase3_raw_pair_sensitivity_test.png`.
+
+**BULK/GLOBAL CONTRACTION INJECTIVITY PROBE (run -77): real signal
+exists in the AGGREGATE channel at all 3 tested cases, but naive argmax
+is reliable only for patient001 — mixed, not a clean rescue.**
+`src/phase3_bulk_scale_sensitivity_test.py` tests whether a uniform
+bulk contraction (not one local point) is recoverable via the
+already-validated 144-angle aggregate readout, reusing
+`fit_scale_curvature_weighted`'s vectorized pattern generalized to any
+`boundary_fn(theta, param)`. The score AT the true parameter value
+(before peak-picking) responds correctly in all 3 cases (heart
+phantom R:50->45, patient001 and patient023 scale:1.0->0.95) — a
+qualitatively better result than runs -74/-75's per-point channel. But
+the raw ARGMAX of the full curve is reliable only for patient001
+(tracks 1.015->0.965 against true 1.000->0.950, cleanly); the heart
+phantom's argmax is stuck on a newly-exposed low-R (R~20) artifact the
+original validated global-fit runs (-32/-38) never encountered because
+their search grid started at R=25; patient023's argmax bias
+re-confirms its already-known structural outer-boundary limitation
+(runs -51-60) now showing up at the bulk level too. Conclusion: real,
+qualified support for "narrow negative, not total" — bulk contraction
+carries more genuine information than per-point localization
+everywhere, but is not an unconditional rescue; patient023 (the
+clinically more interesting, strong-contraction case) remains hard
+even in aggregate. Commit is LOCAL ONLY, not pushed.
+
+New files: `jwave_test/src/phase3_bulk_scale_sensitivity_test.py`,
+`jwave_test/results/figures/phase3_bulk_scale_sensitivity_test.png`.

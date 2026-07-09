@@ -5187,3 +5187,139 @@ forward are `jwave_test/`-specific (Phase 2 work).
   commit is local-only on `phase3-8probe-localmax-experiment` pending
   explicit push request.
 
+### Run 2026-07-09-76 — Raw per-pair sensitivity check: AMBIGUOUS (test-design limitation, not a physics finding) — the known-clean positive control failed to stand out
+- Phase: 3. Follow-up to the "so is ML out of the question?" question:
+  a ghost-dominated result in run -75 means the specific curvature-
+  weighted LINEAR SUM statistic is insensitive/backwards at that
+  location — it does not by itself prove no combination of the raw
+  per-pair data could recover the boundary, since a learned model isn't
+  restricted to the same linear weighting. Built
+  `phase3_raw_pair_sensitivity_test.py`: at each of run -75's 7
+  GHOST-DOMINATED locations, plus the synthetic notch (vertex 5) as a
+  POSITIVE CONTROL, extract each of the 64 individual (tx,rx) pairs'
+  raw envelope amplitude at the predicted arrival time for the true
+  boundary point (bypassing `pair_weight_at_R` entirely, not just the
+  peak selector), and check whether that INDIVIDUAL pair's value
+  decreases/increases correctly when the true boundary is perturbed.
+- **Result: inconclusive by design — the positive control did not
+  discriminate.** The notch (known CLEAN from run -75's weighted-sum
+  test) scored only 8/64 (12.5%) pairs showing correct-direction
+  response — the LOWEST of all 8 locations tested, including the
+  ghost-dominated ones (15.6-23.4%). If the known-good location doesn't
+  score higher than the known-bad ones, this test cannot be trusted to
+  discriminate either way. Likely cause: sampling a single raw envelope
+  value at one predicted arrival time per pair is fragile — a small
+  timing/geometric mismatch lands the sample on the rising/falling edge
+  of the Hilbert-envelope bump rather than its peak, adding per-pair
+  noise that swamps whatever real signal exists. The AGGREGATED
+  144-angle weighted-sum statistic (what runs -74/-75 actually used) is
+  fundamentally more robust than this single-point-per-pair probe.
+- **Conclusion**: informative-negative on the TEST DESIGN, not on the
+  physics — does not resolve whether the 7 ghost-dominated locations
+  are a genuine information void or a linear-combination artifact. Per
+  the standing plan ("try [a bulk-motion probe] also if the test is
+  ambiguous"), proceeded directly to run -77's bulk/global contraction
+  probe instead of trying to patch this per-pair test further.
+- Physical sanity checked? by whom?: Claude — included a positive
+  control specifically to validate the test's discriminating power
+  BEFORE trusting its verdict on the ghost-dominated locations; caught
+  the control's failure to stand out before drawing any physics
+  conclusion from the raw numbers.
+- Gate passed? (Y/N): N/A — diagnostic test, itself found inconclusive.
+- Next action: superseded by run -77 (bulk/global aggregate readout,
+  a fundamentally more robust statistic). If per-pair-level evidence is
+  ever needed again, use a small time WINDOW around the predicted
+  arrival (e.g. max envelope value in a +/-1 cycle window) rather than a
+  single interpolated sample point, to reduce this fragility. Per
+  standing instruction, NOT pushed to origin — commit is local-only on
+  `phase3-8probe-localmax-experiment` pending explicit push request.
+
+### Run 2026-07-09-77 — Bulk/global contraction injectivity probe: real, physically-consistent signal exists in the AGGREGATE (144-angle) channel at all 3 tested cases, but naive argmax is reliable only for patient001 — mixed, not a clean rescue
+- Phase: 3. The discriminating experiment between "this target (fine
+  per-point boundary localization) is dead" and "the hypothesis
+  (learned motion recovery under real acoustic physics) is dead": the
+  project's actual registered hypothesis is BULK myocardial
+  contraction, not fine boundary tracing, and a fixed ghost that
+  destroys per-point argmax localization does not necessarily destroy
+  an AGGREGATE signal — the already-validated global shape-fit method
+  throughout this thread (runs -32/-38/-46 onward) integrates energy
+  across ALL angles precisely because a single bad sector is diluted by
+  many correctly-voting others. Run -76 (per-pair check) came back
+  ambiguous, so proceeded directly to this test per the standing plan.
+- Built `phase3_bulk_scale_sensitivity_test.py`: same injectivity-probe
+  discipline as runs -74/-75/-76 (perturb the true geometry by a known
+  amount, read the RAW score curve before any peak-selection algorithm)
+  but with a BULK/global perturbation (uniform contraction of the WHOLE
+  boundary, not one local vertex/landmark) and an AGGREGATE
+  (144-angle-summed, curvature-weighted) readout instead of one ray or
+  one pair — `aggregate_score_curve()`, the same vectorized pattern as
+  the already-validated `fit_scale_curvature_weighted`, generalized to
+  any `boundary_fn(theta, param)`. Tested: synthetic heart phantom (true
+  R: 50->45 cells, ~10% bulk contraction, ED-like->ES-like) and both
+  real patients' outer boundary (true scale: 1.0->0.95, 5% bulk
+  contraction), all on the same isolated single-boundary 8-probe setup.
+- **Result: the value AT the true parameter (before any peak-picking)
+  shows real, physically-consistent sensitivity in ALL THREE cases** —
+  a qualitatively different, much better result than runs -74/-75's
+  per-point channel (1/14 clean). Heart: score at true R=50 dropped
+  (0.0402->0.0384) and at true R=45 rose (0.0387->0.0412) exactly as
+  expected. patient023: score at true scale=1.0 dropped
+  (0.0077->0.0064) and at true scale=0.95 rose (0.0066->0.0107),
+  cleanly correct. patient001: correct at the NEW value (0.0163->0.0202,
+  up) though not at the OLD value (0.0187->0.0193, up when a decrease
+  was expected) — a partial inconsistency, but the weaker of the two
+  checks, not the primary one.
+- **But the naive ARGMAX of the full aggregate curve is reliable in
+  only ONE of the three cases, for reasons already partly familiar from
+  this project's history.** Synthetic heart: both ED- and ES-capture
+  argmax are stuck at R=20 cells — nowhere near the true 45-50 range. A
+  NEW finding: the original validated global shape-fit runs (-32/-38 on
+  this exact same heart phantom) never encountered this, because their
+  search grid started at R=25 cells, just above this artifact —
+  extending the grid down (done here to give adequate margin) exposed a
+  dominant low-R artifact the earlier "success" was unknowingly
+  avoiding, not immune to. patient023: argmax lands at 0.79->0.90, far
+  from the true 1.00->0.95 shift (and moving the WRONG direction,
+  increasing when contraction should decrease it) — but this
+  re-confirms, rather than contradicts, patient023's already-diagnosed
+  structural outer-boundary limitation (runs -51 to -60), now shown to
+  also affect the bulk/aggregate channel, not just per-point
+  localization. patient001: argmax tracks CLEANLY — 1.015->0.965
+  against a true shift of 1.000->0.950 — recovering the right magnitude
+  and direction with only a small constant offset, no guard band
+  needed.
+- **Conclusion, honest and qualified, not a clean rescue**: bulk/
+  aggregate contraction carries substantially more genuine recoverable
+  information than the per-point channel (real signal at the true
+  value in all 3 cases, vs. near-random per-point behavior in runs
+  -74/-75) — real support for "narrow negative, not total." But it is
+  NOT an unconditional win: the naive aggregate estimate needs the same
+  guard-band discipline this project has needed for every other
+  boundary (a newly-exposed low-R/low-scale artifact for the heart
+  phantom; patient023's already-known structural limit reappearing at
+  the bulk level) before it is trustworthy, except for patient001 (the
+  milder, easier-behaved patient throughout this whole thread), where
+  it already works cleanly end-to-end. The clinically more interesting
+  case (patient023, strong contraction) remains genuinely hard even at
+  the bulk level, not rescued by this test.
+- Physical sanity checked? by whom?: Claude — checked BOTH the raw
+  argmax AND the value-at-true-parameter for each case, since the
+  argmax-only view would have wrongly read the heart phantom as a
+  total failure and the value-only view would have overclaimed a clean
+  win; cross-referenced patient023's bulk-level bias against its
+  already-documented per-point structural limitation (runs -51-60)
+  rather than treating it as a new, unexplained problem.
+- Gate passed? (Y/N): N/A — diagnostic/exploratory test informing the
+  ML direction and the project's informative-negative writeup, not a
+  phase gate.
+- Next action: NOT yet run — a guard-banded re-analysis of the
+  synthetic heart's aggregate curve (excluding R<25, matching the
+  original validated method's grid, the same discipline already used
+  for the ring's outer boundary in runs -41/-45) would confirm whether
+  the true-R region is a genuine, cleanly-trackable secondary peak once
+  the newly-found low-R artifact is excluded, rather than inferring it
+  only from the value-at-true-R check — would require re-simulating
+  (captures were not persisted). Per standing instruction, NOT pushed
+  to origin — commit is local-only on
+  `phase3-8probe-localmax-experiment` pending explicit push request.
+
