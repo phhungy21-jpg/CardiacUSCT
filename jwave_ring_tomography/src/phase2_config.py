@@ -82,15 +82,22 @@ ACDC_LABEL_TO_TISSUE = {
 }
 
 # --- Transducer geometry (NEW: ring/full-surround, not anterior-arc) -----
-# Per protocol Phase 0.1: simultaneous-ring-capture vs. sequential/rotating
-# acquisition must be decided before building the forward model -- NOT YET
-# DECIDED here; both N_ELEMENTS and the capture-mode flag are placeholders
-# until that decision is made and logged.
+# Per protocol Phase 0.1, DECIDED (2026-07-09, explicit user choice "for
+# data clarity"): SEQUENTIAL acquisition, not simultaneous multi-element
+# capture. Each element fires/records in its own turn -- cleanly
+# attributable data, at the cost of reintroducing a CT-style
+# motion-during-scan problem jwave_test's frozen-scene setup never faced.
+# CARDIAC_CYCLE_S / SCAN_DURATION_S are the scan-time -> cardiac-phase
+# mapping this choice now requires (protocol Phase 2.1) -- NOT YET set,
+# since they depend on N_ELEMENTS and per-transmit timing, still TBD
+# pending a real compute-budget estimate.
 F0_HZ = 2.5e6  # unchanged from jwave_test -- revisit if collaborators want
 N_CYCLES = 3   # a different frequency for a water-bath full-body scanner
 
-N_ELEMENTS = None       # TBD -- budget a real per-transmit cost first (Phase 0.1)
-CAPTURE_MODE = None     # "simultaneous" | "sequential" -- TBD (Phase 0.1)
+N_ELEMENTS = None        # TBD -- budget a real per-transmit cost first (Phase 0.1)
+CAPTURE_MODE = "sequential"  # DECIDED 2026-07-09 -- see note above
+CARDIAC_CYCLE_S = None   # TBD -- needed once N_ELEMENTS/scan timing are set
+SCAN_DURATION_S = None   # TBD -- total time for one full sequential scan
 
 # --- Grid resolution + timestep -----------------------------------------
 # Wavelength at max sound speed in this project's tissue set (chest-wall

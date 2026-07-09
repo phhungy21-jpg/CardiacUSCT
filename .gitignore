@@ -10,6 +10,12 @@ jwave_test/results/phase4_pilot_dataset/
 jwave_test/results/mri_irregular_ring_*.npz
 jwave_test/results/mri_motion_cycle_*.npz
 
+# jwave_ring_tomography: same caution -- ray/timing/amplitude arrays
+# derived directly from real ACDC patient anatomy (patient001/023).
+# Figures (PNGs) derived from this data are fine to commit, matching
+# jwave_test's own precedent; only the raw derived arrays are excluded.
+jwave_ring_tomography/results/*.npz
+
 # Python
 __pycache__/
 *.py[cod]

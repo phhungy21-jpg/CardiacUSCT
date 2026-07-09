@@ -4,6 +4,61 @@
 `acoustic_simulation_phase_protocol.md` (the `jwave_test/` protocol).**
 Version 0.1 · Working draft
 
+## Multi-channel information roadmap (2026-07-09)
+
+Per user: "only using all of that information can we precisely
+reconstruct the tissue" — reflection + refraction + dispersion +
+absorption + beam/echo divergence, not transmission time-of-flight
+alone. Motivated directly by run -07's finding: transmission data
+cannot see the blood/myocardium boundary (~0.5% sound-speed contrast);
+a different physical channel (reflection amplitude depends on
+impedance mismatch, not sound speed) might see it where transmission
+can't. Standing discipline: add and validate ONE channel at a time
+against a known case before fusing any of them — do not repeat
+`jwave_test`'s early mistake of combining untested mechanisms at once.
+
+Tractability order, and why:
+1. **Reflection** — cheapest, most immediately actionable. Every
+   near-angle receiver pair (within `_MIN_ANGLE_SEP_DEG` of the
+   transmitter) has been EXCLUDED from every run so far as a
+   "near-field artifact." That's wrong for the wider end of that
+   window: a near-side receiver can't receive anything by straight
+   transmission (no clear path through tissue to it), so anything it
+   picks up is reflected/scattered energy — real reflection data this
+   project has been discarding, not noise. Reuses `jwave_test`'s
+   entire proven pulse-echo methodology (pitch-catch pairs, direct-
+   arrival exclusion, envelope detection), just in the new geometry.
+2. **Absorption** — NOT physically modeled at all yet (jWave's base
+   solver has no attenuation term; `jwave_test` had to write a custom
+   per-step damping solver, `attenuation_solver.py`, to add it,
+   validated to ~0.1% against the analytic law). Until that's ported
+   here, amplitude differences are geometric/transmission-coefficient
+   noise, not real attenuation signal — a real physics addition
+   needed, not just better data processing.
+3. **Refraction** — the full-wave jWave simulation already includes it
+   physically (Snell's-law bending happens automatically in a real
+   wave-equation solve); the gap is on the RECONSTRUCTION side, since
+   straight-ray backprojection/SIRT assumes rays travel in straight
+   lines. Properly exploiting it means bent-ray tracing or full-
+   waveform inversion (FWI) — a substantially bigger lift than anything
+   built so far in this project.
+4. **Dispersion** — frequency-dependent effects. Current arrival-time
+   detection only uses envelope peak time, discarding the pulse's
+   spectral shape entirely. Needs broadband spectral analysis (e.g.
+   frequency-dependent attenuation, spectral centroid shift) — real
+   but nontrivial signal-processing work, not yet started.
+5. **Beam/echo divergence off curved surfaces** — this is exactly the
+   "curvature-dependent reflection divergence" mechanism `jwave_test`
+   diagnosed in its own run -44 (flat/large reflectors return energy
+   almost only to the monostatic direction; curved/small reflectors
+   scatter it widely) — directly relevant to how much weight reflection
+   amplitude from different receiver angles should get once channel 1
+   is built. Connects channel 1 to an already-characterized mechanism
+   rather than a new one.
+
+Currently only transmission time-of-flight (channel 0, already built,
+runs -03 through -07) has been tested. Channel 1 (reflection) is next.
+
 ## Why this is a NEW project, not a continuation of `jwave_test/`
 
 `jwave_test/` closed with a well-diagnosed finding: fine blind boundary
@@ -42,21 +97,32 @@ significant enough to require fresh Gate 2 review, not an extension of
    sparse setup was implicitly simultaneous-capture). A dense angular
    scan takes real time; if it's sequential (a literally rotating
    probe), different angles see different cardiac phases — a CT-style
-   motion artifact. The forward model must decide up front: simultaneous
-   multi-element ring capture (like `jwave_test`'s multistatic
-   capture, just with far more elements and full angular coverage) vs.
-   genuinely sequential/rotating acquisition with explicit phase-gating
-   or motion-during-scan modeling. Do not defer this decision to Phase 3.
+   motion artifact. **Decided (2026-07-09, per explicit user choice
+   "for data clarity"): SEQUENTIAL/rotating acquisition, not
+   simultaneous multi-element capture.** Each element/angle fires and
+   records in its own turn, keeping each measurement's data cleanly
+   attributable to one transmit angle at one moment — the tradeoff
+   being that this reintroduces the CT-style motion problem
+   `jwave_test` never had to face (its sparse 4/8/16-probe setup
+   captured all pairs against one frozen scene). Because of this
+   choice, **explicit motion-during-acquisition modeling is now a hard
+   Phase 2 requirement, not optional**: the forward model must inject
+   the correct cardiac phase for each element's capture time (a
+   time-varying medium across the scan, not one static medium sampled
+   many times), and any Phase 3+ recovery method must account for the
+   fact that different angles observed different instants of the
+   cardiac cycle.
 
 ## Phase 0 — Setup and honest scoping
 
 ### 0.1 Prepare
-- [ ] Confirm the water-bath/full-surround geometry decision is durable
+- [x] Confirm the water-bath/full-surround geometry decision is durable
   (recorded above; revisit only with an explicit reason).
-- [ ] Decide simultaneous-ring-capture vs. sequential/rotating
+- [x] Decide simultaneous-ring-capture vs. sequential/rotating
   acquisition BEFORE writing the Phase 2 forward model (see point 3
-  above) — this is a first-principles modeling choice, not a detail to
-  discover empirically.
+  above) — **DECIDED: sequential**, per explicit user choice. This is a
+  first-principles modeling choice, not a detail to discover
+  empirically.
 - [ ] Compute budget. Ring/dense-angular geometries mean far more
   tx/rx pairs than `jwave_test`'s 4-16-probe setup (N probes -> up to
   N² pairs) — get a real per-transmit cost estimate early and multiply
@@ -124,12 +190,15 @@ a transmission (straight-through) capture in addition to pulse-echo.
   approximating full-surround water-bath access; explicit
   transmission (opposite-side) AND reflection (near-side) pair capture,
   not reflection-only.
-- **Motion-capture mode.** Per the Phase 0 decision: if simultaneous
-  ring capture, model it as one instantaneous multi-element snapshot
-  (like `jwave_test`'s existing multistatic capture, scaled up); if
-  sequential/rotating, the forward model must inject the correct
-  cardiac phase for each element's capture time, not a single frozen
-  scene.
+- **Motion-capture mode: SEQUENTIAL (decided, Phase 0.1).** Each
+  element/angle's transmit-receive event happens at its own moment in
+  the scan, so the forward model must inject the correct cardiac phase
+  for that element's capture time — a time-varying medium sampled once
+  per element as the scan proceeds, NOT one frozen scene reused for
+  every element the way `jwave_test`'s simultaneous multistatic capture
+  worked. This means the medium-building step needs a scan-time ->
+  cardiac-phase mapping (e.g. a scan rate and a cardiac cycle length)
+  decided explicitly here, not left implicit.
 
 ### 2.2 Do
 - Build the ring/water-bath medium + full tx/rx pair capture, reusing

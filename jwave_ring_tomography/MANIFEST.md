@@ -47,8 +47,23 @@ data and tissue information from old projects")**:
   explicitly rather than importing the old code.
 - The anterior-arc-only transducer geometry (`ARRAY_ARC_DEG=60.0` in
   `jwave_test`'s config) — superseded by the ring/full-surround decision
-  above; `N_ELEMENTS`/`CAPTURE_MODE` here are placeholders pending
-  Phase 0.1's compute-budget and motion-handling decisions.
+  above; `N_ELEMENTS` remains a placeholder pending a real compute-budget
+  estimate.
+
+## Motion-capture mode: SEQUENTIAL (decided 2026-07-09)
+
+Per explicit user choice ("lets go with sequential for data clarity"):
+each element/angle fires and records in its own turn, keeping every
+measurement cleanly attributable to one transmit angle at one moment —
+NOT a simultaneous multi-element snapshot. The tradeoff, made explicit
+rather than discovered later: this reintroduces a CT-style
+motion-during-acquisition problem `jwave_test`'s frozen-scene sparse
+setup never had to face. Consequence for Phase 2: the forward model
+needs a scan-time -> cardiac-phase mapping (a decided scan rate and
+cardiac cycle length) so each element's capture uses the medium state
+at ITS OWN moment in the scan, not one static scene reused for every
+element. See `../ring_tomography_phase_protocol.md`'s Phase 2.1 for the
+updated requirement.
 
 ## New, not previously needed
 
