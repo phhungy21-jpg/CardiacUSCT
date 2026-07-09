@@ -5323,3 +5323,154 @@ forward are `jwave_test/`-specific (Phase 2 work).
   to origin — commit is local-only on
   `phase3-8probe-localmax-experiment` pending explicit push request.
 
+---
+
+## PROJECT CLOSURE — 2026-07-09: the sparse multistatic-backprojection reconstruction investigation is CLOSED (informative negative + one narrow, qualified positive). jwave_test is now frozen.
+
+This closes out the reconstruction-methodology investigation that grew
+out of Phase 3 (runs -14 through -77, this same session and the ones
+before it) — not the whole of Phase II, and not a retraction of Gate 2
+or the original Gate 3 toy-recovery result (run -07). What's closing is
+the large, self-directed research arc into whether sparse multistatic
+backprojection (4/8/16 discrete probes around a 2D slice) can recover
+cardiac boundary shape and motion from simulated acoustic data — first
+via known-shape template fitting, then via genuinely blind per-angle
+discovery, then via a battery of injectivity probes built specifically
+to answer "would a learned (ML) prior actually help, or would it
+hallucinate."
+
+### What was actually tested, end to end
+
+1. **Single-echo / DAS beamforming / focused-probe tracking** (early
+   session threads, closed): plateaued on a structural ambiguity
+   between comparably-weak reflecting interfaces; a persistent fixed
+   focusing artifact blocked further progress. Superseded by:
+2. **Multistatic backprojection (the "ultrasonic LiDAR" idea)** — sweep
+   every candidate point, sum backprojected energy across all tx/rx
+   pairs (run -28). Real, substantial win over every single-echo method
+   (RMSE 0.24mm, no fixed artifact) — this became the foundation for
+   everything after it.
+3. **Known-shape template fitting** (triangle, ring, off-center
+   eccentric ring, off-center concave heart-cartoon, real MRI-derived
+   patient001/patient023 contours, static + full motion cycle, up to a
+   2-component LV+RV case) — sweep ONE free parameter (scale, against
+   an already-known shape family) and integrate evidence across the
+   WHOLE predicted boundary. This is genuinely strong and well-
+   characterized: sub-mm accuracy on real anatomy (patient001 inner
+   0.03mm, epicardium 0.33mm), real motion-cycle contraction TRACKING
+   (patient023 inner RMSE 0.80mm against a true 1.09mm signal span, run
+   -54), root-caused fixes for every failure mode found along the way
+   (curvature-dependent reflection divergence, guard bands, local-max
+   selection, self-consistent per-geometry calibration). **This
+   remains the strongest, most defensible result of the whole
+   investigation — but it assumes the boundary's approximate shape is
+   already known, which begs the actual question USCT reconstruction
+   is supposed to answer.**
+4. **Genuine BLIND per-angle discovery** (runs -70 through -73, no
+   shape family assumed, only a known center) — the test that actually
+   matches "image reconstruction using USCT," per the user's own
+   foundational correction mid-investigation. Result: clean and
+   dramatically improving with probe count for a SMOOTH CONVEX circle
+   (4->8->16 probes: RMSE 1.38->0.32->0.10mm), but genuinely
+   NON-MONOTONIC and never-fixed for an irregular, off-center, concave
+   heart-cartoon phantom (8->16 probes: RMSE 1.54->1.67mm, worse, not
+   better). More probes is a real, reliable fix specifically for
+   smooth boundaries and not a general fix for anatomical irregularity.
+5. **Injectivity probes** (runs -74 through -77, built specifically to
+   answer whether a learned/ML prior could rescue blind reconstruction,
+   or would just hallucinate): perturbed the TRUE geometry by a known
+   amount and checked whether the raw acoustic data — before any
+   peak-selection algorithm — actually encodes the shift. Generalized
+   from 1 synthetic tip/notch pair (run -74) to all 10 synthetic
+   vertices plus 4 real-anatomy curvature landmarks across both
+   patients (run -75, correcting run -74's overly-clean framing): only
+   **1 of 14 tested locations (7%)** showed genuinely clean,
+   information-preserving sensitivity; half were ghost-dominated
+   (physically backwards direction, frozen argmax); it did not
+   transfer from the synthetic phantom to real anatomy at all. A
+   per-pair raw-sensitivity follow-up (run -76) came back ambiguous by
+   test design (its own positive control failed to discriminate), so
+   the decisive test became a BULK/global contraction probe (run -77):
+   the aggregate (144-angle-summed) channel DOES carry real,
+   physically-consistent signal in all 3 tested cases — a materially
+   better result than the per-point channel — but the naive read is
+   reliable only for patient001 (the milder case); the synthetic
+   phantom and patient023 (the harder, more clinically interesting
+   strong-contraction case) both need guard-band treatment or remain
+   genuinely hard even in aggregate.
+
+### The verdict
+
+**Fine, blind, per-point boundary shape reconstruction from sparse (4-16
+probe) multistatic acoustic data is a characterized, well-diagnosed
+DEAD END for irregular, real-like cardiac anatomy at this aperture** —
+not from a single failed run, but from a systematic progression of
+tests (probe count, geometry, calibration, selection algorithm,
+confidence metrics, and finally direct information-content probing) that
+each ruled out a specific hypothesis for why it might still be rescued.
+This is an informative negative in the sense Phase 5 of the protocol
+asks for: not "it doesn't work," but "here is exactly why, tied to
+physical cause (ghost-cone geometry between sparse discrete probes,
+compounding combinatorially with shape complexity rather than being
+diluted by more views), and here is where the boundary of what does and
+doesn't work actually sits."
+
+**Bulk/aggregate motion recovery (not shape discovery) is a real,
+narrower, still-open possibility** — genuine signal exists in all 3
+tested cases, but it is anatomy-dependent (works cleanly for a milder
+case, does not for a harder one) and has NOT yet been tested with a
+systematic realism dial (Gate 3's own second checkbox), so it should be
+treated as promising-but-unvalidated, not as a rescued result.
+
+**Alternative acquisition geometries explored via external consultation
+(ChatGPT transcripts, this same closing session)** — two-opposite-probe
+scanning, rotating/ring-array transmission+reflection tomography — are
+conceptually reasonable directions (dense angular coverage is exactly
+what run -73's mechanism diagnosis predicts SHOULD help smooth
+boundaries, and does), but they are not a patch on the current Phase 4
+plan. They require: a fundamentally different acquisition/forward model
+(transmission tomography, not sparse pulse-echo multistatic
+backprojection), explicit cardiac-motion compensation (a rotating/
+sequential scan takes real time; the heart moves during acquisition,
+which nothing in this investigation has modeled), and their own fresh
+Gate 2 physics review — this would be a NEW Phase 2, not a continuation
+of the present one.
+
+### Recommendation on Phase 4 (scale to cardiac anatomy)
+
+**Do not commit Phase 4.2's budget-gated compute (the real,
+150-patient, full-resolution acoustic dataset) to the current sparse
+multistatic-backprojection / blind-shape-discovery approach.** Gate 2
+(acoustic-physics signoff) and Gate 3's original literal checkbox
+(recovery beats naive baseline on a toy phantom, run -07) were both
+passed, and Phase 4.1 (benchmark-then-multiply) is done — so a strict
+reading of the protocol's checklist alone would not block proceeding.
+But everything learned in this investigation since Gate 3 was logged
+shows the SPIRIT of that gate — does the recovery approach actually
+work well enough, robustly enough, to justify the compute — is far less
+confidently satisfied than the original toy-phantom checkbox implied.
+Spending Gate-4-level compute (extrapolated ~91s/13.8GB per transmit at
+real full-heart resolution, run -09) to generate a huge dataset for a
+method whose own self-directed testing shows it mostly fails on
+irregular real anatomy would likely just reproduce, at far higher cost,
+the same informative-negative already established cheaply here.
+
+**If this project continues, two honest paths forward, not one:**
+1. Rescope to the bulk/aggregate contraction target specifically (run
+   -77's narrower positive), close Gate 3's second checkbox properly for
+   THAT target (a systematic gentle->aggressive realism dial, not yet
+   done), and only then reconsider Phase 4.2 for that narrower claim.
+2. Treat the ChatGPT-explored dense-angular/ring-array/transmission-
+   tomography direction as a genuinely new project: a new Phase 2
+   (acoustic model + acquisition geometry) with its own Gate 2
+   collaborator review, explicitly modeling cardiac motion during
+   acquisition from the start rather than discovering it as an
+   afterthought.
+
+Neither path is a continuation of the current Phase 4 plan as scoped.
+**`jwave_test/` is now frozen** as of this entry — findings here (Gate
+1/2/3/4.1 status, the reconstruction-methodology investigation and its
+closure) stand as reported, but should not be silently built on further
+without first deciding which of the two paths above (if either) is
+worth pursuing. See CLAUDE.md for the updated repo-wide framing.
+

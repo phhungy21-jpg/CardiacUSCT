@@ -1422,3 +1422,35 @@ even in aggregate. Commit is LOCAL ONLY, not pushed.
 
 New files: `jwave_test/src/phase3_bulk_scale_sensitivity_test.py`,
 `jwave_test/results/figures/phase3_bulk_scale_sensitivity_test.png`.
+
+## PROJECT CLOSURE (2026-07-09) — `jwave_test/` is now FROZEN
+
+The reconstruction-methodology investigation (runs -14 through -77:
+DAS/focused-probe tracking -> multistatic backprojection -> known-shape
+template fitting -> genuine blind per-angle discovery -> injectivity
+probing) is CLOSED. Verdict, in one line: **fine blind per-point
+boundary shape reconstruction from sparse (4-16 probe) multistatic
+acoustic data is a well-diagnosed dead end for irregular real cardiac
+anatomy at this aperture; bulk/aggregate contraction recovery is a
+real, narrower, still-open possibility, but anatomy-dependent
+(patient001 clean, patient023 hard) and not yet realism-dial-tested.**
+Full reasoning, the complete run-by-run progression, and the Phase 4
+recommendation are in `LOG.md`'s "PROJECT CLOSURE" entry at the end of
+the file — read that before resuming ANY work in this directory.
+
+**Recommendation on Phase 4 (do not skip re-deriving this — read
+LOG.md's closure entry for the full argument): do NOT commit Phase
+4.2's budget-gated compute to the current approach.** Gate 2 and Gate
+3's literal checkbox were both passed (see below), and Phase 4.1 is
+done, so the protocol's checklist alone doesn't block proceeding — but
+everything learned since Gate 3 was logged shows the recovery
+approach's real-world robustness is far weaker than that original
+toy-phantom result implied. Two honest paths forward if this continues:
+(1) rescope to bulk/aggregate contraction specifically and close Gate
+3's still-unmet realism-dial checkbox for that narrower target before
+reconsidering Phase 4.2; (2) treat the dense-angular/ring-array/
+transmission-tomography direction (explored via external ChatGPT
+consultation this closing session) as a genuinely new Phase 2, with its
+own Gate 2 review and explicit cardiac-motion-during-acquisition
+modeling from the start. Neither is a continuation of the current Phase
+4 plan as scoped.

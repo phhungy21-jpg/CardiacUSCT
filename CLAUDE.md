@@ -12,10 +12,20 @@ This repo now spans two phases, each self-contained in its own subfolder:
   Frozen as of 2026-07-07 — findings here (e.g. the blood/myocardium
   weak-contrast result) are informative but NOT collaborator-reviewed, so
   don't treat them as established. See `jwave/LOG.md` / `jwave/MANIFEST.md`.
-- **`jwave_test/`** — Phase II active workspace (cloned from `jwave/` on
-  2026-07-07). Phase 2 (acoustic model definition) work happens here. Source
-  of truth: `acoustic_simulation_phase_protocol.md` (root),
-  `jwave_test/LOG.md`, `jwave_test/MANIFEST.md`.
+- **`jwave_test/`** — Phase II workspace (cloned from `jwave/` on
+  2026-07-07). **Frozen as of 2026-07-09.** Gate 2 (acoustic-physics
+  signoff) and Gate 3's literal checkbox both passed, and Phase 4.1
+  (benchmark) is done — but the extensive reconstruction-methodology
+  investigation built on top of that (runs -14 through -77) concluded
+  that fine blind boundary-shape reconstruction from sparse multistatic
+  acoustic data is a well-diagnosed dead end for irregular real cardiac
+  anatomy, with only a narrower, anatomy-dependent positive for
+  bulk/aggregate contraction recovery. **Do not commit Phase 4.2's
+  budget-gated compute to the current approach without first reading
+  the "PROJECT CLOSURE" entry at the end of `jwave_test/LOG.md`** — it
+  lays out the full reasoning and the two legitimate paths forward
+  (neither of which is a plain continuation of Phase 4 as scoped). See
+  also `jwave_test/MANIFEST.md`'s closure section.
 
 Read the relevant protocol (and that phase's `LOG.md` + `MANIFEST.md`) before
 doing substantive work in either folder — they tell you which phase-gate is
