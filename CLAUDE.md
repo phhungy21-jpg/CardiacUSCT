@@ -1,6 +1,6 @@
 # Instructions for Claude Code sessions on this repo
 
-This repo now spans two phases, each self-contained in its own subfolder:
+This repo now spans three phases, each self-contained in its own subfolder:
 
 - **`pilot/`** — Phase I pilot (cardiac motion recovery from synthetic Doppler
   projections, ACDC → M&Ms). Complete, frozen, written up. Source of truth:
@@ -26,6 +26,20 @@ This repo now spans two phases, each self-contained in its own subfolder:
   lays out the full reasoning and the two legitimate paths forward
   (neither of which is a plain continuation of Phase 4 as scoped). See
   also `jwave_test/MANIFEST.md`'s closure section.
+- **`jwave_ring_tomography/`** — Phase II, NEW active workspace (started
+  2026-07-09, in direct response to `jwave_test/`'s closure). Explores
+  a fundamentally different acquisition geometry: dense angular/ring
+  coverage with a water-bath/full-surround setup (Butterfly/Midjourney-
+  style whole-body scanner model, per explicit user decision — NOT the
+  clinically standard anterior-arc-only transthoracic probe), and
+  transmission+reflection tomography rather than sparse pulse-echo
+  backprojection. Cited tissue properties are reused from `jwave_test/`
+  unchanged; the sparse-probe backprojection/blind-discovery code is
+  deliberately NOT reused (it's specific to the closed problem). Source
+  of truth: `ring_tomography_phase_protocol.md` (root),
+  `jwave_ring_tomography/LOG.md`, `jwave_ring_tomography/MANIFEST.md`.
+  Requires its OWN Gate 2 collaborator signoff — `jwave_test`'s Gate 2
+  does not carry over to this new geometry/medium.
 
 Read the relevant protocol (and that phase's `LOG.md` + `MANIFEST.md`) before
 doing substantive work in either folder — they tell you which phase-gate is
