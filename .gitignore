@@ -16,6 +16,14 @@ jwave_test/results/mri_motion_cycle_*.npz
 # jwave_test's own precedent; only the raw derived arrays are excluded.
 jwave_ring_tomography/results/*.npz
 
+# Colab working notebooks: the packaged zip (and the notebook itself,
+# which embeds that same package as base64 to work around a broken
+# upload widget) both contain copies of mri_motion_cycle_patient001/023
+# -- same real-ACDC-patient-data caution as above, just in a form the
+# filename-based rules can't catch (a zip / base64 blob, not a bare
+# .npz). Session-local working artifacts, not meant for the repo.
+jwave_ring_tomography/notebooks/
+
 # Python
 __pycache__/
 *.py[cod]
