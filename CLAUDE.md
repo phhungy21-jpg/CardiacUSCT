@@ -40,6 +40,18 @@ This repo now spans three phases, each self-contained in its own subfolder:
   `jwave_ring_tomography/LOG.md`, `jwave_ring_tomography/MANIFEST.md`.
   Requires its OWN Gate 2 collaborator signoff — `jwave_test`'s Gate 2
   does not carry over to this new geometry/medium.
+- **`jwave_cylindrical_tomography/`** — Phase II 3D (cylindrical array)
+  extension of the ring project, GPU/Colab-based. Phase 1 open; see its
+  own `LOG.md`/`MANIFEST.md` and `cylindrical_tomography_phase_protocol.md`.
+- **`fourier_inverse/`** — Phase II, NEW active workspace (started
+  2026-10-24). Analytic/Fourier identifiability of the inverse problem
+  (1D transfer matrix, Fourier slice theorem, Fourier diffraction
+  theorem / Born–Rytov, SVD null spaces) — CPU-only, no full-wave
+  simulation. Asks which medium features are uniquely recoverable for a
+  given acquisition design BEFORE spending compute on reconstruction.
+  Source of truth: `fourier_inverse_phase_protocol.md` (root),
+  `fourier_inverse/LOG.md`, `fourier_inverse/MANIFEST.md`. Needs its
+  own Gate 2 signoff on forward-model approximations.
 
 Read the relevant protocol (and that phase's `LOG.md` + `MANIFEST.md`) before
 doing substantive work in either folder — they tell you which phase-gate is

@@ -24,6 +24,29 @@ jwave_ring_tomography/results/*.npz
 # .npz). Session-local working artifacts, not meant for the repo.
 jwave_ring_tomography/notebooks/
 
+# Same caution -- this project's Colab notebooks embed patient023's
+# real ACDC ed_mask as base64 (small, 148KB, but still real patient-
+# derived segmentation data).
+jwave_cylindrical_tomography/notebooks/
+
+# Also excludes the (derived, real-anatomy) 3D medium array this
+# project's src/ scripts save into results/ -- same caution as
+# jwave_ring_tomography/results/*.npz. The JSON viewer-export files
+# embed the same real patient023-derived mesh/point coordinates.
+jwave_cylindrical_tomography/results/*.npz
+jwave_cylindrical_tomography/results/*viewer_data*.json
+# Colab scan outputs dropped at the project root (e.g.
+# single_ring_36_multistatic_scan_patient023.npz) -- same patient-derived data.
+jwave_cylindrical_tomography/*.npz
+
+# fourier_inverse: any array built from real ACDC anatomy (Phase 4
+# cross-check) -- synthetic-only results are fine to commit.
+fourier_inverse/results/*patient*.npz
+# Colab session dumps (patient023-derived reconstructions/data under generic names)
+fourier_inverse/results/colab_session_*/
+# Figure that reproduces a published (copyrighted) patient CT image as its left panel
+fourier_inverse/results/figures/*chest*
+
 # Python
 __pycache__/
 *.py[cod]
@@ -64,3 +87,11 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# fourier_inverse Colab notebooks embed patient023-derived label data (RLE)
+fourier_inverse/notebooks/
+# Phantom traced from a user-supplied cardiac MRI image (medical image, source unverified)
+fourier_inverse/results/figures/*mri_heart*
+# thigh phantom traced from a user-supplied (web) MRI image -- keep outputs/figures out of git
+fourier_inverse/results/*thigh*
+fourier_inverse/results/figures/*thigh*

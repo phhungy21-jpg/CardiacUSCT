@@ -1,0 +1,3 @@
+timing: one short fit 0.1s
+1 src + 180° far arc (pasted design) [band]             omega(1e-4)=nan  omega(1e-3)=nan  omega(1e-2)=0.035  (282s)
+1 src + 180° far arc (pasted design) [1 freq]           omega(1e-4)=nan  omega(1e-3)=nan  omega(1e-2)=0.036  (587s)
